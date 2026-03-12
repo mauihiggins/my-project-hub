@@ -293,6 +293,10 @@
                 renderWorkspaces();
                 loader.classList.add('hidden');
                 if (document.getElementById('view-login').offsetParent) showView('view-workspaces');
+            }, (error) => {
+                console.error("Workspace Load Error:", error);
+                loader.classList.add('hidden');
+                alert("데이터 접근 권한이 없습니다. 파이어베이스 규칙 설정을 확인해 주세요.");
             });
         }
 
@@ -367,6 +371,9 @@
                 wsProjects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 wsProjects.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
                 renderProjects();
+            }, (error) => {
+                console.error("Project Load Error:", error);
+                alert("프로젝트를 불러오지 못했습니다.");
             });
         }
 
@@ -466,6 +473,10 @@
                 updateProjectMeta();
                 renderGantt();
                 loader.classList.add('hidden');
+            }, (error) => {
+                console.error("Task Load Error:", error);
+                loader.classList.add('hidden');
+                alert("작업 데이터를 불러오지 못했습니다.");
             });
         };
 
