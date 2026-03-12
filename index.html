@@ -387,7 +387,14 @@
             wsProjects.forEach(proj => {
                 const card = document.createElement('div');
                 card.className = "bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover-lift cursor-pointer flex flex-col group relative overflow-hidden";
-                card.onclick = (e) => { if(!e.target.closest('button')) window.openProject(proj.id); };
+                
+                // 개선된 클릭 이벤트 리스너 (안 눌리는 현상 방지)
+                card.addEventListener('click', (e) => {
+                    if(!e.target.closest('button')) {
+                        window.openProject(proj.id);
+                    }
+                });
+
                 const prog = proj.progress || 0;
                 card.innerHTML = `
                     <div class="absolute top-0 left-0 w-full h-1 bg-${prog === 100 ? 'emerald' : 'indigo'}-500"></div>
@@ -461,23 +468,39 @@
         function getTasksRef() { return collection(db, 'artifacts', appId, 'public', 'data', `ws_${currentWsId}_tasks_${currentProjId}`); }
 
         window.openProject = (pId) => {
-            currentProjId = pId;
-            const meta = wsProjects.find(p => p.id === pId);
-            document.getElementById('project-title-display').innerText = meta.title;
-            showView('view-project');
-            if (unsubscribeTasks) unsubscribeTasks();
-            loader.classList.remove('hidden');
-            unsubscribeTasks = onSnapshot(getTasksRef(), (snap) => {
-                tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                tasks.sort((a,b) => (a.wbs||'').localeCompare(b.wbs||'', undefined, {numeric: true}));
-                updateProjectMeta();
-                renderGantt();
-                loader.classList.add('hidden');
-            }, (error) => {
-                console.error("Task Load Error:", error);
-                loader.classList.add('hidden');
-                alert("작업 데이터를 불러오지 못했습니다.");
-            });
+            try {
+                currentProjId = pId;
+                const meta = wsProjects.find(p => p.id === pId);
+                if (!meta) {
+                    alert("프로젝트 정보를 불러올 수 없습니다.");
+                    return;
+                }
+                document.getElementById('project-title-display').innerText = meta.title || "이름 없음";
+                showView('view-project'); // 화면 전환 먼저 실행
+                
+                if (unsubscribeTasks) unsubscribeTasks();
+                loader.classList.remove('hidden');
+                
+                unsubscribeTasks = onSnapshot(getTasksRef(), (snap) => {
+                    try {
+                        tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        tasks.sort((a,b) => (a.wbs||'').localeCompare(b.wbs||'', undefined, {numeric: true}));
+                        updateProjectMeta();
+                        renderGantt();
+                        loader.classList.add('hidden');
+                    } catch (err) {
+                        console.error("Render Tasks Error:", err);
+                        loader.classList.add('hidden');
+                    }
+                }, (error) => {
+                    console.error("Task Load Error:", error);
+                    loader.classList.add('hidden');
+                    alert("작업 데이터를 불러오지 못했습니다. 파이어베이스 규칙을 확인해주세요.");
+                });
+            } catch (err) {
+                console.error("Open Project Error:", err);
+                alert("프로젝트를 여는 중 알 수 없는 오류가 발생했습니다.");
+            }
         };
 
         window.backToDashboard = () => {
@@ -486,16 +509,23 @@
         };
         
         function updateProjectMeta() {
-            let totalP = 0, minD = null, maxD = null;
-            tasks.forEach(t => {
-                totalP += (parseInt(t.progress) || 0);
-                if(t.start && t.end) { const s = new Date(t.start), e = new Date(t.end); if(!minD || s < minD) minD = s; if(!maxD || e > maxD) maxD = e; }
-            });
-            const avgP = tasks.length > 0 ? Math.round(totalP / tasks.length) : 0;
-            const sStr = minD ? minD.toISOString().split('T')[0] : null; const eStr = maxD ? maxD.toISOString().split('T')[0] : null;
-            const pMeta = wsProjects.find(p => p.id === currentProjId);
-            if(pMeta && (avgP !== pMeta.progress || sStr !== pMeta.start || eStr !== pMeta.end)) {
-                updateDoc(doc(getProjRef(), currentProjId), { progress: avgP, start: sStr, end: eStr });
+            try {
+                let totalP = 0, minD = null, maxD = null;
+                tasks.forEach(t => {
+                    totalP += (parseInt(t.progress) || 0);
+                    if(t.start && t.end) { const s = new Date(t.start), e = new Date(t.end); if(!minD || s < minD) minD = s; if(!maxD || e > maxD) maxD = e; }
+                });
+                const avgP = tasks.length > 0 ? Math.round(totalP / tasks.length) : 0;
+                const sStr = minD ? minD.toISOString().split('T')[0] : null; const eStr = maxD ? maxD.toISOString().split('T')[0] : null;
+                const pMeta = wsProjects.find(p => p.id === currentProjId);
+                
+                // undefined 에러를 방지하는 안전한 비교 로직
+                if(pMeta && (avgP !== (pMeta.progress || 0) || sStr !== (pMeta.start || null) || eStr !== (pMeta.end || null))) {
+                    updateDoc(doc(getProjRef(), currentProjId), { progress: avgP, start: sStr, end: eStr })
+                        .catch(err => console.error("Update Meta Error:", err));
+                }
+            } catch(e) {
+                console.error("updateProjectMeta error:", e);
             }
         }
 
