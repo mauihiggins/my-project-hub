@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프로젝트 매니저 - 워크스페이스 에디션</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+        
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .gantt-container { position: relative; min-height: 100%; background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px); background-size: 40px 100%; }
+        .gantt-bar { position: absolute; height: 28px; border-radius: 6px; background-color: #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; overflow: hidden; transition: all 0.2s ease; }
+        .gantt-progress { height: 100%; background-color: rgba(0, 0, 0, 0.2); border-right: 1px solid rgba(255,255,255,0.3); }
+        .gantt-label { position: absolute; left: 8px; color: white; font-size: 10px; font-weight: 500; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        
+        #loading-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
+        .hidden { display: none !important; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="bg-indigo-900 text-white p-4 shadow-md flex justify-between items-center shrink-0 z-50">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="window.goHome()">
+            <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-inner">
+                <i class="fa-solid fa-layer-group text-lg"></i>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight">Project Hub <span class="text-indigo-300 font-light text-sm ml-1">Workspace</span></h1>
+        </div>
+        
+        <div id="auth-section" class="flex items-center gap-4">
+            <button id="btn-google-login" onclick="window.loginWithGoogle()" class="hidden bg-white text-gray-800 hover:bg-gray-100 px-4 py-2 rounded-full text-sm font-bold shadow-sm transition flex items-center gap-2">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4" alt="Google"> 로그인
+            </button>
+            
+            <div id="user-profile" class="hidden flex items-center gap-3">
+                <div class="text-right hidden sm:block">
+                    <p id="user-name" class="text-sm font-bold text-white leading-tight"></p>
+                    <p id="user-email" class="text-[10px] text-indigo-300"></p>
+                </div>
+                <img id="user-photo" src="" referrerpolicy="no-referrer" class="w-9 h-9 rounded-full border-2 border-indigo-400 shadow-sm" alt="Profile">
+                <button onclick="window.logout()" class="text-indigo-300 hover:text-white ml-2" title="로그아웃"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex flex-1 overflow-hidden relative">
+        <div id="loading-overlay"><i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-600 mb-4"></i><p class="text-gray-500 font-medium">데이터를 불러오는 중입니다...</p></div>
+
+        <!-- Login View -->
+        <div id="view-login" class="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-6 z-40 hidden">
+            <div class="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full border border-gray-100">
+                <div class="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner"><i class="fa-solid fa-shield-check"></i></div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">팀 워크스페이스 접속</h2>
+                <p class="text-gray-500 text-sm mb-8">안전하게 프로젝트를 공유하려면 로그인하세요.</p>
+                <button onclick="window.loginWithGoogle()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center gap-3 text-lg">
+                    <i class="fa-brands fa-google"></i> 구글로 시작하기
+                </button>
+            </div>
+        </div>
+
+        <!-- Workspaces View -->
+        <div id="view-workspaces" class="w-full h-full p-6 md:p-10 overflow-y-auto bg-gray-50 flex flex-col gap-6 hidden">
+            <div class="flex justify-between items-end mb-4">
+                <div>
+                    <h2 class="text-3xl font-bold text-gray-800 tracking-tight">나의 워크스페이스</h2>
+                    <p class="text-sm text-gray-500 mt-1">내가 관리하거나 참여 중인 워크스페이스입니다.</p>
+                </div>
+                <button onclick="window.openModal('modal-ws-create')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-lg shadow-md transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> 새 워크스페이스
+                </button>
+            </div>
+            <div id="workspaces-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10"></div>
+        </div>
+
+        <!-- Dashboard View (Projects list) -->
+        <div id="view-dashboard" class="w-full h-full p-6 md:p-10 overflow-y-auto bg-gray-50 flex flex-col gap-6 hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-wrap justify-between items-center gap-4">
+                <div class="flex items-center gap-4">
+                    <button onclick="window.goHome()" class="text-gray-400 hover:text-indigo-600 transition"><i class="fa-solid fa-arrow-left text-xl"></i></button>
+                    <div>
+                        <h2 id="current-ws-name" class="text-2xl font-bold text-gray-800 leading-none">워크스페이스</h2>
+                        <span id="current-ws-role" class="text-[10px] font-bold text-indigo-500 uppercase bg-indigo-50 px-2 py-0.5 rounded-full mt-1 inline-block"></span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-manage-members" onclick="window.openMembersModal()" class="hidden bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold py-2 px-4 rounded-lg shadow-sm transition items-center gap-2 text-sm">
+                        <i class="fa-solid fa-users"></i> 멤버 관리
+                    </button>
+                    <button onclick="window.openModal('modal-project-create')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition flex items-center gap-2 text-sm">
+                        <i class="fa-solid fa-plus"></i> 프로젝트 추가
+                    </button>
+                </div>
+            </div>
+            <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
+        </div>
+
+        <!-- Project View (Gantt) -->
+        <div id="view-project" class="w-full h-full flex flex-row hidden">
+            <aside id="left-panel" class="bg-white flex flex-col shrink-0 z-10 shadow-lg border-r border-gray-200" style="width: 50%; min-width: 500px;">
+                <div class="bg-indigo-50 p-4 border-b border-indigo-100 flex justify-between items-center shrink-0">
+                    <div class="flex items-center gap-3">
+                        <button onclick="window.backToDashboard()" class="text-indigo-400 hover:text-indigo-700 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-indigo-100"><i class="fa-solid fa-arrow-left"></i></button>
+                        <h2 id="project-title-display" class="text-xl font-bold text-indigo-900 tracking-tight">프로젝트</h2>
+                    </div>
+                    <button onclick="window.addNewTask()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow-sm transition">작업 추가</button>
+                </div>
+                <div class="flex-1 overflow-y-auto">
+                    <table class="w-full text-sm text-left text-gray-600">
+                        <thead class="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0 z-10 border-b">
+                            <tr><th class="px-2 py-2 w-12 text-center">WBS</th><th class="px-4 py-2">작업명</th><th class="px-2 py-2 text-center">진행률</th><th class="px-2 py-2 text-center w-10"></th></tr>
+                        </thead>
+                        <tbody id="task-list"></tbody>
+                    </table>
+                </div>
+            </aside>
+            <div id="resizer" class="w-1 bg-gray-200 hover:bg-indigo-400 cursor-col-resize shrink-0 transition-colors"></div>
+            <section id="right-panel" class="flex-1 bg-white overflow-hidden flex flex-col">
+                <div id="gantt-header-container" class="overflow-hidden border-b border-gray-200 bg-gray-50 shrink-0"><div id="gantt-header" class="flex relative h-10"></div></div>
+                <div id="gantt-scroll-area" class="flex-1 overflow-auto relative bg-[#fcfcfc]">
+                    <div id="gantt-body" class="gantt-container min-h-full">
+                        <!-- SVG 선후행 마커용 영역 유지 -->
+                        <svg id="gantt-lines" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0"><defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="dependency-arrow" /></marker></defs></svg>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Error Modal for unauthorized domain -->
+    <div id="modal-error" class="hidden modal-overlay">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full m-4 shadow-2xl text-center">
+            <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-4"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h2 class="text-xl font-bold mb-2 text-gray-800">승인되지 않은 도메인</h2>
+            <p class="text-sm text-gray-500 mb-6">보안을 위해 파이어베이스 콘솔에 아래 주소를 <strong>승인된 도메인</strong>으로 등록해야 로그인할 수 있습니다.</p>
+            <div class="bg-gray-50 p-4 rounded-lg text-left text-xs mb-6 border">
+                <p class="font-bold text-gray-700 mb-2">복사할 주소:</p>
+                <div class="flex items-center justify-between bg-white border p-2 rounded">
+                    <code id="current-domain-text" class="text-indigo-600 font-mono font-bold text-[12px] break-all mr-2">도메인 감지 중...</code>
+                    <button onclick="window.copyDomain()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-[10px] font-bold shrink-0 hover:bg-indigo-700 transition">복사</button>
+                </div>
+            </div>
+            <button onclick="window.closeModal('modal-error')" class="w-full bg-gray-200 hover:bg-gray-300 py-2.5 rounded-lg font-bold transition">확인 후 닫기</button>
+        </div>
+    </div>
+
+    <!-- Create Workspace Modal -->
+    <div id="modal-ws-create" class="hidden modal-overlay">
+        <div class="bg-white rounded-2xl p-8 max-w-sm w-full m-4 shadow-2xl">
+            <h2 class="text-xl font-bold mb-4">워크스페이스 생성</h2>
+            <input type="text" id="new-ws-name" class="w-full border p-3 rounded-lg mb-6 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="예: 디자인팀, 신사업TF">
+            <div class="flex justify-end gap-2">
+                <button onclick="window.closeModal('modal-ws-create')" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition">취소</button>
+                <button onclick="window.submitNewWorkspace()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow transition">생성</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Member Management Modal -->
+    <div id="modal-ws-members" class="hidden modal-overlay">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full m-4 shadow-2xl flex flex-col max-h-[80vh]">
+            <h2 class="text-xl font-bold mb-4"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>팀원 초대 및 관리</h2>
+            <div class="flex gap-2 mb-4">
+                <input type="email" id="new-member-email" class="flex-1 border p-2 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="초대할 구글 이메일">
+                <button onclick="window.addWorkspaceMember()" class="bg-gray-800 hover:bg-black text-white px-4 py-2 rounded-lg font-bold transition">초대</button>
+            </div>
+            <div class="flex-1 overflow-y-auto border rounded-lg bg-gray-50 p-2">
+                <ul id="members-list" class="divide-y divide-gray-200"></ul>
+            </div>
+            <button onclick="window.closeModal('modal-ws-members')" class="mt-6 bg-gray-200 hover:bg-gray-300 py-2 rounded-lg font-bold transition">닫기</button>
+        </div>
+    </div>
+
+    <!-- Create Project Modal -->
+    <div id="modal-project-create" class="hidden modal-overlay">
+        <div class="bg-white rounded-2xl p-8 max-w-sm w-full m-4 shadow-2xl">
+            <h2 class="text-xl font-bold mb-4">새 프로젝트 생성</h2>
+            <input type="text" id="new-proj-title" class="w-full border p-3 rounded-lg mb-4 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="프로젝트 제목">
+            <input type="text" id="new-proj-manager" class="w-full border p-3 rounded-lg mb-6 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="PM (담당자)">
+            <div class="flex justify-end gap-2">
+                <button onclick="window.closeModal('modal-project-create')" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition">취소</button>
+                <button onclick="window.submitNewProject()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow transition">생성</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, setDoc, getDoc, getDocs, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 🔥 사용자님의 Firebase Config 고정 적용 완료
+        const firebaseConfig = {
+            apiKey: "AIzaSyC_A9S3QcfSykB5jyJP3UyhPLgrEJKnhoY",
+            authDomain: "g-project-c4e2f.firebaseapp.com",
+            projectId: "g-project-c4e2f",
+            storageBucket: "g-project-c4e2f.firebasestorage.app",
+            messagingSenderId: "479032795497",
+            appId: "1:479032795497:web:bf9e91498e5aadc3111df8",
+            measurementId: "G-RB915DZRKB"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'gantt-google-auth-v1';
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+        let myWorkspaces = [];
+        let currentWsId = null;
+        let currentWsMeta = null;
+        let wsProjects = [];
+        let unsubscribeWorkspaces = null;
+        let unsubscribeProjects = null;
+        let unsubscribeTasks = null;
+        let tasks = [];
+
+        const loader = document.getElementById('loading-overlay');
+        const showView = (viewId) => { 
+            ['view-login', 'view-workspaces', 'view-dashboard', 'view-project'].forEach(id => document.getElementById(id).classList.add('hidden')); 
+            document.getElementById(viewId).classList.remove('hidden'); 
+        };
+        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
+        // Authentication logic
+        window.loginWithGoogle = async () => {
+            try { 
+                loader.classList.remove('hidden'); 
+                await signInWithPopup(auth, provider); 
+            } catch (e) { 
+                loader.classList.add('hidden');
+                if (e.code === 'auth/unauthorized-domain') {
+                    // 도메인 감지 후 에러 팝업 띄우기
+                    const hostname = window.location.hostname || window.location.host || "도메인을 확인할 수 없습니다.";
+                    document.getElementById('current-domain-text').innerText = hostname;
+                    window.openModal('modal-error');
+                } else { alert("로그인 에러가 발생했습니다: " + e.message); }
+            }
+        };
+
+        window.copyDomain = () => {
+            const domainText = document.getElementById('current-domain-text').innerText;
+            const tempInput = document.createElement("textarea");
+            tempInput.value = domainText;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand("copy");
+            document.body.removeChild(tempInput);
+            alert("주소가 복사되었습니다!\n파이어베이스 콘솔의 '승인된 도메인' 목록에 추가해 주세요.");
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                document.getElementById('btn-google-login').classList.add('hidden');
+                document.getElementById('user-profile').classList.remove('hidden');
+                document.getElementById('user-name').innerText = user.displayName || 'User';
+                document.getElementById('user-email').innerText = user.email || user.uid;
+                document.getElementById('user-photo').src = user.photoURL || 'https://ui-avatars.com/api/?name=' + (user.displayName || 'U') + '&background=random';
+                loadWorkspaces();
+            } else {
+                document.getElementById('btn-google-login').classList.remove('hidden');
+                document.getElementById('user-profile').classList.add('hidden');
+                loader.classList.add('hidden');
+                showView('view-login');
+            }
+        });
+
+        // Workspace management
+        function getWsRef() { return collection(db, 'artifacts', appId, 'public', 'data', 'workspaces'); }
+
+        function loadWorkspaces() {
+            if(!currentUser) return;
+            if(unsubscribeWorkspaces) unsubscribeWorkspaces();
+            unsubscribeWorkspaces = onSnapshot(getWsRef(), (snap) => {
+                const allWs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const identifier = currentUser.email || currentUser.uid;
+                myWorkspaces = allWs.filter(w => w.ownerEmail === identifier || (w.allowedEmails && w.allowedEmails.includes(identifier)));
+                
+                // 최신순 정렬
+                myWorkspaces.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                renderWorkspaces();
+                loader.classList.add('hidden');
+                if (document.getElementById('view-login').offsetParent) showView('view-workspaces');
+            });
+        }
+
+        function renderWorkspaces() {
+            const grid = document.getElementById('workspaces-grid');
+            grid.innerHTML = '';
+            if (myWorkspaces.length === 0) {
+                grid.innerHTML = '<div class="col-span-full py-16 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300 shadow-sm"><i class="fa-solid fa-folder-open text-4xl mb-3 opacity-50"></i><br>소속된 워크스페이스가 없습니다.<br>새 워크스페이스를 만들거나 초대받으세요.</div>';
+                return;
+            }
+            myWorkspaces.forEach(ws => {
+                const card = document.createElement('div');
+                const isOwner = ws.ownerEmail === (currentUser.email || currentUser.uid);
+                card.className = "bg-white p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 hover-lift cursor-pointer flex flex-col group relative overflow-hidden h-40";
+                card.onclick = () => window.enterWorkspace(ws.id);
+                card.innerHTML = `
+                    <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl shadow-sm"><i class="fa-solid fa-building"></i></div>
+                        <div class="flex items-center gap-2">
+                            <span class="bg-${isOwner?'indigo':'gray'}-50 text-${isOwner?'indigo':'gray'}-700 px-2 py-0.5 rounded text-[10px] font-bold border border-${isOwner?'indigo':'gray'}-200">${isOwner?'Owner':'Member'}</span>
+                            ${isOwner ? `<button onclick="event.stopPropagation(); window.deleteWorkspace('${ws.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition z-10 relative"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-800 truncate">${ws.name}</h3>
+                    <div class="mt-auto text-xs text-gray-500 flex justify-between items-center">
+                        <span>멤버 ${(ws.allowedEmails?.length || 0) + 1}명</span>
+                        <i class="fa-solid fa-arrow-right text-gray-300 group-hover:text-indigo-500 transition"></i>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        window.submitNewWorkspace = async () => {
+            const name = document.getElementById('new-ws-name').value.trim();
+            if(!name) return;
+            loader.classList.remove('hidden');
+            await addDoc(getWsRef(), {
+                name,
+                ownerEmail: currentUser.email || currentUser.uid,
+                allowedEmails: [],
+                createdAt: Date.now()
+            });
+            document.getElementById('new-ws-name').value = '';
+            window.closeModal('modal-ws-create');
+        };
+
+        window.deleteWorkspace = async (id) => {
+            if(confirm("워크스페이스를 완전히 삭제하시겠습니까?\n내부 데이터도 함께 사라집니다.")) {
+                await deleteDoc(doc(getWsRef(), id));
+            }
+        };
+
+        window.enterWorkspace = (wsId) => {
+            currentWsId = wsId;
+            currentWsMeta = myWorkspaces.find(w => w.id === wsId);
+            document.getElementById('current-ws-name').innerText = currentWsMeta.name;
+            const isOwner = currentWsMeta.ownerEmail === (currentUser.email || currentUser.uid);
+            document.getElementById('current-ws-role').innerText = isOwner ? '관리자' : '멤버';
+            document.getElementById('btn-manage-members').classList.toggle('hidden', !isOwner);
+            showView('view-dashboard');
+            loadProjects();
+        };
+
+        // Project management
+        function getProjRef() { return collection(db, 'artifacts', appId, 'public', 'data', `ws_${currentWsId}_projects`); }
+
+        function loadProjects() {
+            if (unsubscribeProjects) unsubscribeProjects();
+            unsubscribeProjects = onSnapshot(getProjRef(), (snap) => {
+                wsProjects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                wsProjects.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+                renderProjects();
+            });
+        }
+
+        function renderProjects() {
+            const grid = document.getElementById('projects-grid');
+            grid.innerHTML = '';
+            if (wsProjects.length === 0) {
+                grid.innerHTML = '<div class="col-span-full py-16 text-center text-gray-400 bg-white rounded-2xl border border-dashed shadow-sm">프로젝트가 없습니다. 새 프로젝트를 생성해보세요.</div>';
+                return;
+            }
+            wsProjects.forEach(proj => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover-lift cursor-pointer flex flex-col group relative overflow-hidden";
+                card.onclick = (e) => { if(!e.target.closest('button')) window.openProject(proj.id); };
+                const prog = proj.progress || 0;
+                card.innerHTML = `
+                    <div class="absolute top-0 left-0 w-full h-1 bg-${prog === 100 ? 'emerald' : 'indigo'}-500"></div>
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-[10px] font-bold uppercase ${prog === 100 ? 'text-emerald-500 bg-emerald-50' : 'text-gray-500 bg-gray-100'} px-2 py-0.5 rounded">${prog===100?'완료':'진행중'}</span>
+                        <button onclick="window.deleteProject('${proj.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition z-10 relative bg-white rounded shadow-sm p-1"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                    </div>
+                    <h3 class="font-bold text-gray-800 text-lg truncate mb-1">${proj.title}</h3>
+                    <p class="text-[11px] text-gray-500 mb-4 flex items-center gap-1"><i class="fa-solid fa-user-circle"></i> ${proj.manager || '미지정'}</p>
+                    <div class="mt-auto">
+                        <div class="flex justify-between text-[10px] font-bold mb-1.5"><span class="text-gray-400">${proj.start || '-'} ~ ${proj.end || '-'}</span><span class="text-${prog===100?'emerald':'indigo'}-600">${prog}%</span></div>
+                        <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-${prog===100?'emerald':'indigo'}-500 h-full transition-all" style="width: ${prog}%"></div></div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        window.submitNewProject = async () => {
+            const title = document.getElementById('new-proj-title').value.trim();
+            const manager = document.getElementById('new-proj-manager').value.trim();
+            if(!title) return;
+            await addDoc(getProjRef(), { title, manager, progress: 0, createdAt: Date.now(), isHidden: false });
+            document.getElementById('new-proj-title').value = '';
+            document.getElementById('new-proj-manager').value = '';
+            window.closeModal('modal-project-create');
+        };
+
+        window.deleteProject = async (id) => {
+            if(confirm("이 프로젝트를 삭제하시겠습니까?")) await deleteDoc(doc(getProjRef(), id));
+        };
+
+        // Member management
+        window.openMembersModal = () => {
+            const list = document.getElementById('members-list');
+            const ownerInfo = currentWsMeta.ownerEmail || '관리자';
+            list.innerHTML = `<li class="py-3 px-3 flex justify-between items-center text-sm font-bold text-indigo-900 border-b bg-indigo-50/50 rounded-t-lg"><span><i class="fa-solid fa-crown text-amber-500 mr-2"></i>${ownerInfo}</span><span class="text-[10px] bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded">Owner</span></li>`;
+            
+            const allowed = currentWsMeta.allowedEmails || [];
+            if(allowed.length === 0) {
+                list.innerHTML += `<li class="py-4 text-center text-xs text-gray-400">초대된 팀원이 없습니다.</li>`;
+            } else {
+                allowed.forEach(email => {
+                    list.innerHTML += `<li class="py-2.5 px-3 flex justify-between items-center text-sm text-gray-700 hover:bg-white transition"><span><i class="fa-solid fa-user text-gray-300 mr-2"></i>${email}</span><button onclick="window.removeMember('${email}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition"><i class="fa-solid fa-xmark"></i></button></li>`;
+                });
+            }
+            window.openModal('modal-ws-members');
+        };
+
+        window.addWorkspaceMember = async () => {
+            const emailIn = document.getElementById('new-member-email');
+            const email = emailIn.value.trim().toLowerCase();
+            if(!email || email === currentWsMeta.ownerEmail) return;
+            try {
+                await updateDoc(doc(getWsRef(), currentWsId), { allowedEmails: arrayUnion(email) });
+                emailIn.value = '';
+                if(!currentWsMeta.allowedEmails.includes(email)) currentWsMeta.allowedEmails.push(email);
+                window.openMembersModal();
+            } catch(e) { console.error(e); }
+        };
+
+        window.removeMember = async (email) => {
+            if(confirm(`${email} 님을 제외하시겠습니까?`)) {
+                await updateDoc(doc(getWsRef(), currentWsId), { allowedEmails: arrayRemove(email) });
+                currentWsMeta.allowedEmails = currentWsMeta.allowedEmails.filter(e => e !== email);
+                window.openMembersModal();
+            }
+        };
+
+        // Gantt Chart logic
+        function getTasksRef() { return collection(db, 'artifacts', appId, 'public', 'data', `ws_${currentWsId}_tasks_${currentProjId}`); }
+
+        window.openProject = (pId) => {
+            currentProjId = pId;
+            const meta = wsProjects.find(p => p.id === pId);
+            document.getElementById('project-title-display').innerText = meta.title;
+            showView('view-project');
+            if (unsubscribeTasks) unsubscribeTasks();
+            loader.classList.remove('hidden');
+            unsubscribeTasks = onSnapshot(getTasksRef(), (snap) => {
+                tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                tasks.sort((a,b) => (a.wbs||'').localeCompare(b.wbs||'', undefined, {numeric: true}));
+                updateProjectMeta();
+                renderGantt();
+                loader.classList.add('hidden');
+            });
+        };
+
+        window.backToDashboard = () => {
+            if (unsubscribeTasks) unsubscribeTasks();
+            showView('view-dashboard');
+        };
+        
+        function updateProjectMeta() {
+            let totalP = 0, minD = null, maxD = null;
+            tasks.forEach(t => {
+                totalP += (parseInt(t.progress) || 0);
+                if(t.start && t.end) { const s = new Date(t.start), e = new Date(t.end); if(!minD || s < minD) minD = s; if(!maxD || e > maxD) maxD = e; }
+            });
+            const avgP = tasks.length > 0 ? Math.round(totalP / tasks.length) : 0;
+            const sStr = minD ? minD.toISOString().split('T')[0] : null; const eStr = maxD ? maxD.toISOString().split('T')[0] : null;
+            const pMeta = wsProjects.find(p => p.id === currentProjId);
+            if(pMeta && (avgP !== pMeta.progress || sStr !== pMeta.start || eStr !== pMeta.end)) {
+                updateDoc(doc(getProjRef(), currentProjId), { progress: avgP, start: sStr, end: eStr });
+            }
+        }
+
+        function renderGantt() {
+            const list = document.getElementById('task-list');
+            list.innerHTML = '';
+            tasks.forEach(t => {
+                const tr = document.createElement('tr'); tr.className = "hover:bg-indigo-50/30 transition group border-b border-gray-100";
+                tr.innerHTML = `
+                    <td class="px-2 py-2 text-center font-bold text-indigo-400 text-[11px]">${t.wbs || '-'}</td>
+                    <td class="px-2 py-2"><div style="padding-left: ${((t.wbs||"").split('.').length-1)*1}rem"><input type="text" value="${t.name}" onchange="window.updateTask('${t.id}', 'name', this.value)" class="w-full bg-transparent outline-none border border-transparent hover:border-gray-200 focus:bg-white rounded px-1 text-xs"></div></td>
+                    <td class="px-2 py-2 text-center flex items-center justify-center"><input type="number" value="${t.progress}" onchange="window.updateTask('${t.id}', 'progress', this.value)" class="w-10 text-center font-bold text-xs bg-transparent border border-transparent hover:border-gray-200 focus:bg-white rounded outline-none text-${t.progress===100?'emerald':'indigo'}-600"><span class="text-[9px] text-gray-400 ml-0.5">%</span></td>
+                    <td class="px-2 py-2 text-center"><button onclick="window.deleteTask('${t.id}')" class="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"><i class="fa-solid fa-trash-can text-xs"></i></button></td>
+                `;
+                list.appendChild(tr);
+            });
+            renderGanttBars(tasks);
+        }
+
+        function renderGanttBars(display) {
+            const hdr = document.getElementById('gantt-header'); const bdy = document.getElementById('gantt-body');
+            if (!hdr || !bdy) return; hdr.innerHTML = ''; bdy.querySelectorAll('.gantt-bar, .today-line').forEach(b => b.remove());
+            if(display.length === 0) return;
+            
+            let minD = new Date(); display.forEach(t => { if(t.start) { const d = new Date(t.start); if(d < minD) minD = d; } });
+            minD.setDate(minD.getDate() - 2);
+            for(let i=0; i<40; i++) {
+                const d = new Date(minD); d.setDate(d.getDate() + i);
+                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                const el = document.createElement('div'); el.style.width = "40px"; el.className = `flex-shrink-0 text-center text-[9px] border-r border-gray-200 h-full flex flex-col items-center justify-center ${isWeekend ? 'bg-red-50/30' : 'bg-transparent'}`;
+                el.innerHTML = `<span class="font-bold ${isWeekend?'text-red-400':'text-gray-600'}">${d.getDate()}</span><span class="scale-75 opacity-40">${d.getMonth()+1}월</span>`;
+                hdr.appendChild(el);
+            }
+            display.forEach((t, i) => {
+                if(!t.start) return;
+                const offset = Math.ceil((new Date(t.start) - minD) / 86400000), dur = t.end ? Math.ceil((new Date(t.end) - new Date(t.start)) / 86400000) + 1 : 1;
+                const bar = document.createElement('div'); bar.className = `gantt-bar bg-${t.progress === 100 ? 'emerald' : 'indigo'}-500`;
+                bar.style.left = `${offset * 40}px`; bar.style.top = `${(i * 36) + 8}px`; bar.style.height = `20px`; bar.style.width = `${Math.max(dur, 1) * 40}px`;
+                bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress}%"></div><span class="gantt-label text-[9px] truncate px-1">${t.name}</span>`;
+                bdy.appendChild(bar);
+            });
+        }
+
+        window.addNewTask = async () => {
+            let nextWBS = 1; tasks.forEach(t => { if(t.wbs) { const v = parseInt(t.wbs.split('.')[0]); if(v >= nextWBS) nextWBS = v + 1; } });
+            await addDoc(getTasksRef(), { wbs: nextWBS.toString(), name: '새 작업', progress: 0, start: new Date().toISOString().split('T')[0], end: new Date(Date.now()+86400000).toISOString().split('T')[0] });
+        };
+        window.updateTask = async (id, field, val) => {
+            const data = { [field]: field === 'progress' ? Math.min(100, Math.max(0, parseInt(val) || 0)) : val };
+            await updateDoc(doc(getTasksRef(), id), data);
+        };
+        window.deleteTask = async (id) => { if(confirm("작업을 삭제하시겠습니까?")) await deleteDoc(doc(getTasksRef(), id)); };
+
+        // 리사이저
+        let isResizing = false;
+        document.getElementById('resizer')?.addEventListener('mousedown', () => { isResizing = true; document.body.style.userSelect = 'none'; });
+        document.addEventListener('mousemove', (e) => { if(isResizing) { const lp = document.getElementById('left-panel'); if(lp) lp.style.width = `${Math.min(window.innerWidth-300, Math.max(300, e.clientX))}px`; } });
+        document.addEventListener('mouseup', () => { if(isResizing) { isResizing = false; document.body.style.userSelect = 'auto'; renderGantt(); } });
+        document.getElementById('gantt-scroll-area')?.addEventListener('scroll', function() { document.getElementById('gantt-header-container').scrollLeft = this.scrollLeft; });
+
+        window.logout = () => signOut(auth);
+        window.goHome = () => showView('view-workspaces');
+    </script>
+</body>
+</html>
