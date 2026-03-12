@@ -332,26 +332,47 @@
         }
 
         window.submitNewWorkspace = async () => {
+            // Null 에러 방지를 위한 사용자 인증 정보 강력한 사전 체크
+            if (!currentUser) {
+                alert("사용자 인증 정보가 유실되었습니다. 브라우저를 새로고침하거나 다시 로그인해 주세요.");
+                showView('view-login');
+                return;
+            }
+
             const name = document.getElementById('new-ws-name').value.trim();
             if(!name) return;
+            
             loader.classList.remove('hidden');
-            await addDoc(getWsRef(), {
-                name,
-                ownerEmail: currentUser.email || currentUser.uid,
-                allowedEmails: [],
-                createdAt: Date.now()
-            });
-            document.getElementById('new-ws-name').value = '';
-            window.closeModal('modal-ws-create');
+            try {
+                await addDoc(getWsRef(), {
+                    name,
+                    ownerEmail: currentUser.email || currentUser.uid,
+                    allowedEmails: [],
+                    createdAt: Date.now()
+                });
+                document.getElementById('new-ws-name').value = '';
+                window.closeModal('modal-ws-create');
+            } catch (err) {
+                console.error("Create Workspace Error:", err);
+                alert("워크스페이스 생성에 실패했습니다: " + err.message);
+            } finally {
+                loader.classList.add('hidden');
+            }
         };
 
         window.deleteWorkspace = async (id) => {
             if(confirm("워크스페이스를 완전히 삭제하시겠습니까?\n내부 데이터도 함께 사라집니다.")) {
-                await deleteDoc(doc(getWsRef(), id));
+                try {
+                    await deleteDoc(doc(getWsRef(), id));
+                } catch (err) {
+                    console.error("Delete Workspace Error:", err);
+                    alert("삭제 중 오류가 발생했습니다.");
+                }
             }
         };
 
         window.enterWorkspace = (wsId) => {
+            if (!currentUser) return; // 안전 체크
             currentWsId = wsId;
             currentWsMeta = myWorkspaces.find(w => w.id === wsId);
             document.getElementById('current-ws-name').innerText = currentWsMeta.name;
@@ -373,7 +394,7 @@
                 renderProjects();
             }, (error) => {
                 console.error("Project Load Error:", error);
-                alert("프로젝트를 불러오지 못했습니다.");
+                alert("프로젝트를 불러오지 못했습니다. 파이어베이스 보안 규칙을 확인해 주세요.");
             });
         }
 
@@ -388,23 +409,19 @@
                 const card = document.createElement('div');
                 card.className = "bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover-lift cursor-pointer flex flex-col group relative overflow-hidden";
                 
-                // 개선된 클릭 이벤트 리스너 (안 눌리는 현상 방지)
-                card.addEventListener('click', (e) => {
-                    if(!e.target.closest('button')) {
-                        window.openProject(proj.id);
-                    }
-                });
-
                 const prog = proj.progress || 0;
+                
+                // 확실한 클릭 인식을 위해 카드 전체를 덮는 투명 버튼 영역(z-0) 추가 및 글자 클릭 방해 방지
                 card.innerHTML = `
-                    <div class="absolute top-0 left-0 w-full h-1 bg-${prog === 100 ? 'emerald' : 'indigo'}-500"></div>
-                    <div class="flex justify-between items-center mb-3">
-                        <span class="text-[10px] font-bold uppercase ${prog === 100 ? 'text-emerald-500 bg-emerald-50' : 'text-gray-500 bg-gray-100'} px-2 py-0.5 rounded">${prog===100?'완료':'진행중'}</span>
-                        <button onclick="window.deleteProject('${proj.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition z-10 relative bg-white rounded shadow-sm p-1"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                    <div class="absolute top-0 left-0 w-full h-full z-0" onclick="window.openProject('${proj.id}')"></div>
+                    <div class="absolute top-0 left-0 w-full h-1 bg-${prog === 100 ? 'emerald' : 'indigo'}-500 z-10 pointer-events-none"></div>
+                    <div class="flex justify-between items-center mb-3 z-10 relative">
+                        <span class="text-[10px] font-bold uppercase ${prog === 100 ? 'text-emerald-500 bg-emerald-50' : 'text-gray-500 bg-gray-100'} px-2 py-0.5 rounded pointer-events-none">${prog===100?'완료':'진행중'}</span>
+                        <button onclick="event.stopPropagation(); window.deleteProject('${proj.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition z-20 relative bg-white rounded shadow-sm p-1"><i class="fa-solid fa-trash-can text-xs"></i></button>
                     </div>
-                    <h3 class="font-bold text-gray-800 text-lg truncate mb-1">${proj.title}</h3>
-                    <p class="text-[11px] text-gray-500 mb-4 flex items-center gap-1"><i class="fa-solid fa-user-circle"></i> ${proj.manager || '미지정'}</p>
-                    <div class="mt-auto">
+                    <h3 class="font-bold text-gray-800 text-lg truncate mb-1 z-10 relative pointer-events-none">${proj.title}</h3>
+                    <p class="text-[11px] text-gray-500 mb-4 flex items-center gap-1 z-10 relative pointer-events-none"><i class="fa-solid fa-user-circle"></i> ${proj.manager || '미지정'}</p>
+                    <div class="mt-auto z-10 relative pointer-events-none">
                         <div class="flex justify-between text-[10px] font-bold mb-1.5"><span class="text-gray-400">${proj.start || '-'} ~ ${proj.end || '-'}</span><span class="text-${prog===100?'emerald':'indigo'}-600">${prog}%</span></div>
                         <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-${prog===100?'emerald':'indigo'}-500 h-full transition-all" style="width: ${prog}%"></div></div>
                     </div>
@@ -417,14 +434,27 @@
             const title = document.getElementById('new-proj-title').value.trim();
             const manager = document.getElementById('new-proj-manager').value.trim();
             if(!title) return;
-            await addDoc(getProjRef(), { title, manager, progress: 0, createdAt: Date.now(), isHidden: false });
-            document.getElementById('new-proj-title').value = '';
-            document.getElementById('new-proj-manager').value = '';
-            window.closeModal('modal-project-create');
+            
+            try {
+                await addDoc(getProjRef(), { title, manager, progress: 0, createdAt: Date.now(), isHidden: false });
+                document.getElementById('new-proj-title').value = '';
+                document.getElementById('new-proj-manager').value = '';
+                window.closeModal('modal-project-create');
+            } catch (err) {
+                console.error("Create Project Error:", err);
+                alert("프로젝트 생성 중 오류가 발생했습니다.");
+            }
         };
 
         window.deleteProject = async (id) => {
-            if(confirm("이 프로젝트를 삭제하시겠습니까?")) await deleteDoc(doc(getProjRef(), id));
+            if(confirm("이 프로젝트를 삭제하시겠습니까?")) {
+                try {
+                    await deleteDoc(doc(getProjRef(), id));
+                } catch (err) {
+                    console.error("Delete Project Error:", err);
+                    alert("삭제 중 오류가 발생했습니다.");
+                }
+            }
         };
 
         // Member management
@@ -475,31 +505,37 @@
                     alert("프로젝트 정보를 불러올 수 없습니다.");
                     return;
                 }
-                document.getElementById('project-title-display').innerText = meta.title || "이름 없음";
-                showView('view-project'); // 화면 전환 먼저 실행
+                
+                const titleEl = document.getElementById('project-title-display');
+                if(titleEl) titleEl.innerText = meta.title || "이름 없음";
+                
+                showView('view-project'); // 화면 전환을 가장 먼저 실행
                 
                 if (unsubscribeTasks) unsubscribeTasks();
                 loader.classList.remove('hidden');
                 
-                unsubscribeTasks = onSnapshot(getTasksRef(), (snap) => {
+                const tasksRef = collection(db, 'artifacts', appId, 'public', 'data', `ws_${currentWsId}_tasks_${currentProjId}`);
+                unsubscribeTasks = onSnapshot(tasksRef, (snap) => {
                     try {
                         tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        tasks.sort((a,b) => (a.wbs||'').localeCompare(b.wbs||'', undefined, {numeric: true}));
+                        // 안전한 정렬 로직 (문자열이 아닌 값이 들어올 경우의 에러 원천 차단)
+                        tasks.sort((a,b) => String(a.wbs||'').localeCompare(String(b.wbs||''), undefined, {numeric: true}));
                         updateProjectMeta();
                         renderGantt();
                         loader.classList.add('hidden');
                     } catch (err) {
                         console.error("Render Tasks Error:", err);
                         loader.classList.add('hidden');
+                        alert("작업 데이터를 그리는 중 오류가 발생했습니다: " + err.message);
                     }
                 }, (error) => {
                     console.error("Task Load Error:", error);
                     loader.classList.add('hidden');
-                    alert("작업 데이터를 불러오지 못했습니다. 파이어베이스 규칙을 확인해주세요.");
+                    alert("작업 데이터를 불러오지 못했습니다. 파이어베이스 규칙을 확인해주세요.\n" + error.message);
                 });
             } catch (err) {
                 console.error("Open Project Error:", err);
-                alert("프로젝트를 여는 중 알 수 없는 오류가 발생했습니다.");
+                alert("프로젝트를 여는 중 오류가 발생했습니다: " + err.message);
             }
         };
 
@@ -519,7 +555,6 @@
                 const sStr = minD ? minD.toISOString().split('T')[0] : null; const eStr = maxD ? maxD.toISOString().split('T')[0] : null;
                 const pMeta = wsProjects.find(p => p.id === currentProjId);
                 
-                // undefined 에러를 방지하는 안전한 비교 로직
                 if(pMeta && (avgP !== (pMeta.progress || 0) || sStr !== (pMeta.start || null) || eStr !== (pMeta.end || null))) {
                     updateDoc(doc(getProjRef(), currentProjId), { progress: avgP, start: sStr, end: eStr })
                         .catch(err => console.error("Update Meta Error:", err));
@@ -570,7 +605,14 @@
         }
 
         window.addNewTask = async () => {
-            let nextWBS = 1; tasks.forEach(t => { if(t.wbs) { const v = parseInt(t.wbs.split('.')[0]); if(v >= nextWBS) nextWBS = v + 1; } });
+            let nextWBS = 1; 
+            tasks.forEach(t => { 
+                if(t.wbs) { 
+                    // 에러 방지를 위해 강제로 문자열 변환 후 처리
+                    const v = parseInt(String(t.wbs).split('.')[0]); 
+                    if(v >= nextWBS) nextWBS = v + 1; 
+                } 
+            });
             await addDoc(getTasksRef(), { wbs: nextWBS.toString(), name: '새 작업', progress: 0, start: new Date().toISOString().split('T')[0], end: new Date(Date.now()+86400000).toISOString().split('T')[0] });
         };
         window.updateTask = async (id, field, val) => {
