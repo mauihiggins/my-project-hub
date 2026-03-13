@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.6.0</title>
+    <title>프로젝트 매니저 - v4.6.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -79,7 +79,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.6.0</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.6.1</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -1057,10 +1057,14 @@
             
             const totalDays = Math.max(40, diffDays(minD, maxD));
             const totalWidth = totalDays * 30; // 30px per day
+            
+            // v4.6.1: 작업 개수에 비례하여 간트 차트의 최소 높이 계산 (세로선 잘림 방지)
+            const totalHeightCSS = `max(100%, ${visibleTasks.length * 32 + 80}px)`;
 
-            // 횡스크롤을 위한 컨테이너 너비 지정
+            // 횡스크롤을 위한 컨테이너 너비 지정 및 높이 동적 설정
             hdr.style.width = `${totalWidth}px`;
             bdy.style.width = `${totalWidth}px`;
+            bdy.style.height = totalHeightCSS;
             svg.style.width = `${totalWidth}px`;
             
             for(let i=0; i<totalDays; i++) {
