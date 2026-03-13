@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.0.2</title>
+    <title>프로젝트 매니저 - v4.2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -40,13 +40,21 @@
 
         /* Table Styles (Enterprise look) */
         table { border-collapse: collapse; }
-        th, td { border: 1px solid #cbd5e1; }
-        th { background-color: #f8fafc; font-weight: 600; color: #475569; font-size: 12px; }
+        th, td { border: 1px solid #cbd5e1; overflow: hidden; }
+        th { background-color: #f8fafc; font-weight: 600; color: #475569; font-size: 12px; position: relative; }
         tr.draggable-row { cursor: grab; background-color: #ffffff; }
         tr.draggable-row:hover { background-color: #f1f5f9; }
         tr.draggable-row.selected-row { background-color: #e0f2fe; } /* Selection Highlight */
         tr.draggable-row:active { cursor: grabbing; }
         
+        /* Column Resizer Handle */
+        .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10; user-select: none; }
+        .col-resizer:hover, .col-resizer.resizing { background-color: #3b82f6; }
+        
+        /* Dropdown Menu for Columns */
+        .dropdown-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: white; border: 1px solid #cbd5e1; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; z-index: 100; padding: 12px; width: 160px; }
+        .dropdown-menu.show { display: block; }
+
         /* Inputs in table */
         .cell-input { width: 100%; height: 100%; border: none; background: transparent; outline: none; font-size: 12px; padding: 4px; }
         .cell-input:focus { background-color: #ffffff; box-shadow: inset 0 0 0 1px #3b82f6; }
@@ -67,7 +75,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.0.2</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.2.0</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -157,7 +165,7 @@
                 </div>
                 
                 <div class="flex items-center gap-3 text-xs">
-                    <!-- 필터 도구 추가 -->
+                    <!-- 필터 및 컬럼 도구 -->
                     <div class="flex items-center bg-gray-50 border border-gray-300 rounded px-2 py-1">
                         <i class="fa-solid fa-filter text-gray-400 mr-2"></i>
                         <select id="task-filter-select" onchange="window.renderGanttUI()" class="bg-transparent outline-none text-gray-700 cursor-pointer">
@@ -166,6 +174,25 @@
                             <option value="completed">완료된 작업 (100%)</option>
                         </select>
                     </div>
+                    
+                    <div class="relative">
+                        <button id="col-menu-btn" onclick="document.getElementById('col-menu').classList.toggle('show')" class="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-1.5 px-3 rounded flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-columns text-blue-600"></i> 열 표시
+                        </button>
+                        <div id="col-menu" class="dropdown-menu">
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('wbs', this.checked)" class="accent-blue-600" id="chk-col-wbs"> WBS</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('duration', this.checked)" class="accent-blue-600" id="chk-col-duration"> 기간</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('start', this.checked)" class="accent-blue-600" id="chk-col-start"> 시작일</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('end', this.checked)" class="accent-blue-600" id="chk-col-end"> 종료일</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('progress', this.checked)" class="accent-blue-600" id="chk-col-progress"> % 완료</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('predecessor', this.checked)" class="accent-blue-600" id="chk-col-predecessor"> 선행</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('manager', this.checked)" class="accent-blue-600" id="chk-col-manager"> 담당자</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('priority', this.checked)" class="accent-blue-600" id="chk-col-priority"> 우선순위</label>
+                            <label class="flex items-center gap-2 mb-1.5 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('notes', this.checked)" class="accent-blue-600" id="chk-col-notes"> 비고</label>
+                            <label class="flex items-center gap-2 text-gray-700 cursor-pointer"><input type="checkbox" checked onchange="window.toggleCol('link', this.checked)" class="accent-blue-600" id="chk-col-link"> 산출물</label>
+                        </div>
+                    </div>
+
                     <button onclick="window.generateProjectReport()" class="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-1.5 px-3 rounded flex items-center gap-1.5 transition"><i class="fa-solid fa-file-invoice text-blue-600"></i> 보고서 생성</button>
                 </div>
             </div>
@@ -174,21 +201,24 @@
             <div class="flex-1 flex flex-row overflow-hidden bg-white">
                 <!-- Left Panel (WBS Table) -->
                 <aside id="left-panel" class="flex flex-col shrink-0 z-10 border-r border-gray-300 bg-white relative" style="width: 50%; min-width: 500px;">
-                    <div class="flex-1 overflow-y-auto overflow-x-auto">
-                        <table class="w-full text-left whitespace-nowrap table-fixed">
+                    <div class="flex-1 overflow-y-auto overflow-x-auto relative">
+                        <table class="text-left whitespace-nowrap table-fixed w-max">
                             <thead class="sticky top-0 z-20 shadow-sm">
                                 <tr>
-                                    <th class="p-1.5 w-10 text-center border-b border-gray-300 bg-gray-100">
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100" style="width:40px;">
                                         <input type="checkbox" id="check-all" onchange="window.toggleAllTasks(this)" class="cursor-pointer accent-blue-600">
                                     </th>
-                                    <th class="p-1.5 w-14 text-center border-b border-gray-300 bg-gray-100">WBS</th>
-                                    <th class="p-1.5 w-64 border-b border-gray-300 bg-gray-100">작업 이름</th>
-                                    <th class="p-1.5 w-16 text-center border-b border-gray-300 bg-gray-100">기간</th>
-                                    <th class="p-1.5 w-24 text-center border-b border-gray-300 bg-gray-100">시작일</th>
-                                    <th class="p-1.5 w-24 text-center border-b border-gray-300 bg-gray-100">종료일</th>
-                                    <th class="p-1.5 w-16 text-center border-b border-gray-300 bg-gray-100">% 완료</th>
-                                    <th class="p-1.5 w-16 text-center border-b border-gray-300 bg-gray-100">선행</th>
-                                    <th class="p-1.5 w-24 text-center border-b border-gray-300 bg-gray-100">담당자</th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-wbs" style="width: 60px;"><span class="truncate block">WBS</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 border-b border-gray-300 bg-gray-100 col-name" style="width: 250px;"><span class="truncate block">작업 이름</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-duration" style="width: 60px;"><span class="truncate block">기간</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-start" style="width: 90px;"><span class="truncate block">시작일</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-end" style="width: 90px;"><span class="truncate block">종료일</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-progress" style="width: 65px;"><span class="truncate block">% 완료</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-predecessor" style="width: 70px;"><span class="truncate block">선행</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-manager" style="width: 90px;"><span class="truncate block">담당자</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-priority" style="width: 80px;"><span class="truncate block">우선순위</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-notes" style="width: 140px;"><span class="truncate block">비고</span><div class="col-resizer"></div></th>
+                                    <th class="p-1.5 text-center border-b border-gray-300 bg-gray-100 col-link" style="width: 120px;"><span class="truncate block">산출물</span><div class="col-resizer"></div></th>
                                 </tr>
                             </thead>
                             <tbody id="task-list"></tbody>
@@ -273,7 +303,8 @@
         // 상태 관리
         window.APP_STATE = { 
             user: null, wsList: [], curWs: null, curWsMeta: null, projList: [], curProjId: null, 
-            rawTasks: [], tasksTree: [], selectedTasks: new Set(), lastCheckedIdx: null, unsubs: {} 
+            rawTasks: [], tasksTree: [], selectedTasks: new Set(), lastCheckedIdx: null, unsubs: {},
+            hiddenCols: new Set() // 숨겨진 열 관리 상태 추가
         };
 
         // UI Helpers
@@ -284,6 +315,15 @@
         window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
         const showView = (id) => { ['view-login','view-workspaces','view-dashboard','view-project'].forEach(v=>document.getElementById(v).classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); };
+
+        // 외부 영역 클릭 시 열 표시 메뉴 닫기
+        document.addEventListener('click', e => {
+            const menu = document.getElementById('col-menu');
+            const btn = document.getElementById('col-menu-btn');
+            if(menu && menu.classList.contains('show') && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
 
         // Auth
         window.loginWithGoogle = async () => { try { L(); await signInWithPopup(auth, provider); } catch(e) { H(); window.showAlert(e.message); } };
@@ -437,6 +477,49 @@
         window.collapsedWBS = window.collapsedWBS || new Set();
         window.toggleCollapse = (wbs) => { if(window.collapsedWBS.has(wbs)) window.collapsedWBS.delete(wbs); else window.collapsedWBS.add(wbs); renderGanttUI(); };
 
+        // 열 표시/숨기기 로직
+        window.toggleCol = (colName, isVisible) => {
+            if(isVisible) window.APP_STATE.hiddenCols.delete(colName);
+            else window.APP_STATE.hiddenCols.add(colName);
+            window.applyColVisibility();
+        };
+
+        window.applyColVisibility = () => {
+            const allCols = ['wbs', 'name', 'duration', 'start', 'end', 'progress', 'predecessor', 'manager', 'priority', 'notes', 'link'];
+            allCols.forEach(col => {
+                const els = document.querySelectorAll('.col-' + col);
+                const isHidden = window.APP_STATE.hiddenCols.has(col);
+                els.forEach(el => el.style.display = isHidden ? 'none' : '');
+            });
+            // 열 추가/삭제 후 테이블 너비 변화 방지를 위해 핸들 초기화
+        };
+
+        // 컬럼 너비 리사이저 로직
+        let colDragInfo = null;
+        document.addEventListener('mousedown', e => {
+            if(e.target.classList.contains('col-resizer')) {
+                const th = e.target.parentElement;
+                colDragInfo = { th, startX: e.clientX, startWidth: th.offsetWidth };
+                e.target.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+            }
+        });
+        document.addEventListener('mousemove', e => {
+            if(colDragInfo) {
+                const newWidth = Math.max(30, colDragInfo.startWidth + (e.clientX - colDragInfo.startX));
+                colDragInfo.th.style.width = newWidth + 'px';
+                colDragInfo.th.style.minWidth = newWidth + 'px';
+                colDragInfo.th.style.maxWidth = newWidth + 'px';
+            }
+        });
+        document.addEventListener('mouseup', e => {
+            if(colDragInfo) {
+                document.querySelector('.col-resizer.resizing')?.classList.remove('resizing');
+                colDragInfo = null;
+                document.body.style.cursor = '';
+            }
+        });
+
         // 자동 일정 변경 연쇄 적용 (선행 작업 변경 시)
         window.cascadeDates = async (predId, newPredEnd) => {
             const successors = window.APP_STATE.rawTasks.filter(t => t.predecessor === predId);
@@ -550,26 +633,45 @@
                     window.reorderTasks(dragId, t.id, dropAfter);
                 });
 
+                // 새로운 우선순위/비고 필드가 포함된 테이블 로우 렌더링
                 tr.innerHTML = `
-                    <td class="p-0 text-center border-r border-gray-300 bg-gray-50 cursor-pointer" onclick="window.toggleTaskSelect(event, '${t.id}', ${idx})">
+                    <td class="p-0 text-center border-r border-gray-300 bg-gray-50 cursor-pointer col-checkbox" onclick="window.toggleTaskSelect(event, '${t.id}', ${idx})">
                         <input type="checkbox" value="${t.id}" ${isChecked?'checked':''} class="pointer-events-none accent-blue-600 scale-90">
                     </td>
-                    <td class="p-0 text-center text-xs text-gray-500 border-r border-gray-300 font-mono">${t.wbs||'-'}</td>
-                    <td class="p-0 border-r border-gray-300">
+                    <td class="p-0 text-center text-xs text-gray-500 border-r border-gray-300 font-mono col-wbs">${t.wbs||'-'}</td>
+                    <td class="p-0 border-r border-gray-300 col-name">
                         <div class="flex items-center h-full w-full" style="padding-left:${depth*1}rem">
                             ${t.isParent ? `<button onclick="window.toggleCollapse('${t.wbs}')" class="w-4 flex-shrink-0 text-gray-500 hover:text-gray-800 outline-none"><i class="fa-solid ${isCollapsed?'fa-plus-square':'fa-minus-square'}"></i></button>` : `<span class="w-4 flex-shrink-0 inline-block"></span>`}
                             <input type="text" value="${t.name||''}" onchange="window.updateTask('${t.id}', 'name', this.value)" class="cell-input truncate ${t.isParent?'font-bold':''}">
                         </div>
                     </td>
-                    <td class="p-0 border-r border-gray-300"><input type="number" value="${t.duration||1}" ${t.isParent?'disabled':''} min="1" onchange="window.updateTaskDate('${t.id}', 'duration', this.value)" class="cell-input text-center"></td>
-                    <td class="p-0 border-r border-gray-300"><input type="date" value="${t.start||''}" ${t.isParent?'disabled':''} onchange="window.updateTaskDate('${t.id}', 'start', this.value)" class="cell-input text-center"></td>
-                    <td class="p-0 border-r border-gray-300 text-center text-xs text-gray-500">${t.end||'-'}</td>
-                    <td class="p-0 border-r border-gray-300 relative"><input type="number" value="${t.progress||0}" ${t.isParent?'disabled':''} onchange="window.updateTask('${t.id}', 'progress', this.value)" class="cell-input text-center font-semibold text-${t.progress===100?'emerald':'blue'}-600 pr-3"><span class="absolute right-2 top-1.5 text-gray-400 pointer-events-none text-[10px]">%</span></td>
-                    <td class="p-0 border-r border-gray-300"><select onchange="window.updateTask('${t.id}', 'predecessor', this.value)" class="cell-input text-gray-600 cursor-pointer">${getPredOpts(t.id, t.predecessor)}</select></td>
-                    <td class="p-0 border-r border-gray-300"><input type="text" value="${t.manager||''}" onchange="window.updateTask('${t.id}', 'manager', this.value)" class="cell-input text-center text-gray-600"></td>
+                    <td class="p-0 border-r border-gray-300 col-duration"><input type="number" value="${t.duration||1}" ${t.isParent?'disabled':''} min="1" onchange="window.updateTaskDate('${t.id}', 'duration', this.value)" class="cell-input text-center"></td>
+                    <td class="p-0 border-r border-gray-300 col-start"><input type="date" value="${t.start||''}" ${t.isParent?'disabled':''} onchange="window.updateTaskDate('${t.id}', 'start', this.value)" class="cell-input text-center"></td>
+                    <td class="p-0 border-r border-gray-300 text-center text-xs text-gray-500 col-end">${t.end||'-'}</td>
+                    <td class="p-0 border-r border-gray-300 relative col-progress"><input type="number" value="${t.progress||0}" ${t.isParent?'disabled':''} onchange="window.updateTask('${t.id}', 'progress', this.value)" class="cell-input text-center font-semibold text-${t.progress===100?'emerald':'blue'}-600 pr-3"><span class="absolute right-2 top-1.5 text-gray-400 pointer-events-none text-[10px]">%</span></td>
+                    <td class="p-0 border-r border-gray-300 col-predecessor"><select onchange="window.updateTask('${t.id}', 'predecessor', this.value)" class="cell-input text-gray-600 cursor-pointer">${getPredOpts(t.id, t.predecessor)}</select></td>
+                    <td class="p-0 border-r border-gray-300 col-manager"><input type="text" value="${t.manager||''}" onchange="window.updateTask('${t.id}', 'manager', this.value)" class="cell-input text-center text-gray-600"></td>
+                    
+                    <td class="p-0 border-r border-gray-300 col-priority">
+                        <select onchange="window.updateTask('${t.id}', 'priority', this.value)" class="cell-input text-gray-600 cursor-pointer text-center">
+                            <option value="low" ${t.priority==='low'?'selected':''}>낮음</option>
+                            <option value="normal" ${!t.priority || t.priority==='normal'?'selected':''}>보통</option>
+                            <option value="high" ${t.priority==='high'?'selected':''}>높음</option>
+                        </select>
+                    </td>
+                    <td class="p-0 border-r border-gray-300 col-notes"><input type="text" value="${t.notes||''}" placeholder="메모" onchange="window.updateTask('${t.id}', 'notes', this.value)" class="cell-input text-gray-600"></td>
+                    <td class="p-0 border-r border-gray-300 col-link">
+                        <div class="flex items-center h-full w-full px-1 gap-1">
+                            <input type="url" value="${t.link||''}" placeholder="드라이브 URL" onchange="window.updateTask('${t.id}', 'link', this.value)" class="cell-input truncate flex-1">
+                            ${t.link ? `<a href="${t.link.startsWith('http') ? t.link : 'https://'+t.link}" target="_blank" title="산출물 열기" class="text-blue-500 hover:text-blue-700 shrink-0 px-1"><i class="fa-solid fa-file-lines"></i></a>` : ''}
+                        </div>
+                    </td>
                 `;
                 list.appendChild(tr);
             });
+
+            // 선택된 컬럼 숨김 적용
+            window.applyColVisibility();
 
             // Gantt Time Scale & Bars
             let minD = new Date(); let maxD = new Date();
@@ -661,7 +763,9 @@
         // ================= 데이터 편집 =================
         window.addNewTask = async () => {
             const raw = window.APP_STATE.rawTasks; let maxWbs = 0; raw.forEach(t=>{ const v=parseInt((t.wbs||'0').split('.')[0]); if(v>maxWbs) maxWbs=v; });
-            await addDoc(collection(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`), {wbs:(maxWbs+1).toString(), name:'새 작업', duration:1, start:toISODate(new Date()), end:toISODate(new Date()), progress:0});
+            await addDoc(collection(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`), {
+                wbs:(maxWbs+1).toString(), name:'새 작업', duration:1, start:toISODate(new Date()), end:toISODate(new Date()), progress:0, priority: 'normal', notes: '', link: ''
+            });
         };
         window.updateTask = async (id, field, val) => {
             let v = val; if(field==='progress') v = Math.min(100, Math.max(0, parseInt(val)||0));
@@ -888,7 +992,7 @@
         // Scroll sync
         window.syncScroll = () => { document.getElementById('gantt-header-container').scrollLeft = document.getElementById('gantt-scroll-area').scrollLeft; };
         
-        // Resizer
+        // Resizer (Left Panel)
         let isResizing = false;
         document.getElementById('resizer')?.addEventListener('mousedown', () => { isResizing = true; document.body.style.userSelect = 'none'; });
         document.addEventListener('mousemove', (e) => { if(isResizing) { const lp = document.getElementById('left-panel'); if(lp) lp.style.width = `${Math.min(window.innerWidth-400, Math.max(300, e.clientX))}px`; } });
