@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.6.3</title>
+    <title>프로젝트 매니저 - v4.5.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -58,16 +58,12 @@
         .dropdown-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: white; border: 1px solid #cbd5e1; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 4px; z-index: 100; padding: 12px; width: 160px; }
         .dropdown-menu.show { display: block; }
 
-        /* v4.6.3: Inputs in table - Double Click to Edit Logic & CSS fixes */
+        /* Inputs in table - Double Click to Edit Logic */
         .cell-input { width: 100%; height: 100%; border: none; background: transparent; outline: none; font-size: 12px; padding: 4px; }
-        
-        /* 읽기 전용 상태일 때 (1번 클릭 선택 시) - 클릭이 input을 통과해 td에 닿도록 */
-        .editable-cell { pointer-events: none; }
-        
-        /* 수정 모드(편집 활성화) 상태일 때 (2번 클릭 시) */
-        .editable-cell.editing { pointer-events: auto; background-color: #ffffff !important; box-shadow: inset 0 0 0 1px #3b82f6 !important; cursor: text !important; }
-        
-        .cell-input:disabled { color: #94a3b8; cursor: not-allowed !important; pointer-events: none; }
+        .cell-input:focus { background-color: #ffffff; box-shadow: inset 0 0 0 1px #3b82f6; cursor: text !important; }
+        .cell-input[readonly] { cursor: grab; }
+        .cell-input[readonly]:active { cursor: grabbing; }
+        .cell-input:disabled { color: #94a3b8; cursor: not-allowed; }
 
         /* General Modals & Overlays */
         #loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
@@ -84,7 +80,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.6.3</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.5.0</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -170,14 +166,6 @@
                         <button onclick="window.deleteSelectedTasks()" class="flex flex-col items-center justify-center p-1.5 px-3 hover:bg-red-50 rounded text-gray-700 border border-transparent hover:border-red-200 transition">
                             <i class="fa-solid fa-trash-can text-red-500 mb-1 text-sm"></i><span>선택 삭제</span>
                         </button>
-                        <div class="w-px h-8 bg-gray-300 mx-1"></div>
-                        <!-- 실행취소 버튼 -->
-                        <button onclick="window.undo()" class="flex flex-col items-center justify-center p-1.5 px-3 hover:bg-gray-100 rounded text-gray-700 border border-transparent transition" title="실행 취소 (Ctrl+Z)">
-                            <i class="fa-solid fa-rotate-left text-gray-600 mb-1 text-sm"></i><span>실행 취소</span>
-                        </button>
-                        <button onclick="window.redo()" class="flex flex-col items-center justify-center p-1.5 px-3 hover:bg-gray-100 rounded text-gray-700 border border-transparent transition" title="다시 실행 (Ctrl+Y)">
-                            <i class="fa-solid fa-rotate-right text-gray-600 mb-1 text-sm"></i><span>다시 실행</span>
-                        </button>
                     </div>
                 </div>
                 
@@ -220,7 +208,7 @@
             <div class="flex-1 flex flex-row overflow-hidden bg-white">
                 <!-- Left Panel (WBS Table) -->
                 <aside id="left-panel" class="flex flex-col shrink-0 z-10 border-r border-gray-300 bg-white relative" style="width: 50%; min-width: 500px;">
-                    <div id="task-list-scroll-area" class="flex-1 overflow-y-auto overflow-x-auto relative" onscroll="window.syncVerticalScroll('left')">
+                    <div class="flex-1 overflow-y-auto overflow-x-auto relative">
                         <table class="text-left whitespace-nowrap table-fixed w-max">
                             <thead class="sticky top-0 z-20 shadow-sm">
                                 <tr>
@@ -257,7 +245,7 @@
                     <div id="gantt-header-container" class="overflow-hidden border-b border-gray-300 bg-gray-100 shrink-0">
                         <div id="gantt-header" class="flex relative h-8"></div>
                     </div>
-                    <div id="gantt-scroll-area" class="flex-1 overflow-auto relative" onscroll="window.syncVerticalScroll('right')">
+                    <div id="gantt-scroll-area" class="flex-1 overflow-auto relative" onscroll="window.syncScroll()">
                         <div id="gantt-body" class="gantt-container min-h-full">
                             <svg id="gantt-lines" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
                                 <defs><marker id="arrowhead" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto"><polygon points="0 0, 6 2, 0 4" fill="#64748b" /></marker></defs>
@@ -346,15 +334,11 @@
         const auth = getAuth(app); const db = getFirestore(app); const provider = new GoogleAuthProvider();
         const GLOBAL_APP_ID = 'gantt-google-auth-v1';
 
-        // 상태 관리 (히스토리, 스크롤 상태 추가)
+        // 상태 관리 (visibleTasks 추가)
         window.APP_STATE = { 
             user: null, wsList: [], curWs: null, curWsMeta: null, projList: [], curProjId: null, 
             rawTasks: [], visibleTasks: [], selectedTasks: new Set(), lastCheckedIdx: null, unsubs: {},
-            hiddenCols: new Set(), isRestored: false, isRestoringProj: false,
-            // Undo/Redo 관련 상태
-            history: [], historyIndex: -1, isUndoRedoAction: false, historyTimeout: null,
-            // 스크롤 자동 이동 상태
-            scrollToBottom: false
+            hiddenCols: new Set(), isRestored: false, isRestoringProj: false
         };
 
         // UI Helpers
@@ -378,135 +362,6 @@
                 menu.classList.remove('show');
             }
         });
-
-        // ================= 단축키 (Undo / Redo) =================
-        document.addEventListener('keydown', (e) => {
-            const tag = document.activeElement.tagName;
-            // 텍스트 입력 중일 때는 브라우저 기본 되돌리기가 작동하도록 무시
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-                if(!document.activeElement.readOnly) return; 
-            }
-            
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-                e.preventDefault();
-                if (e.shiftKey) window.redo();
-                else window.undo();
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-                e.preventDefault();
-                window.redo();
-            }
-        });
-
-        // ================= History (Undo/Redo) 로직 =================
-        window.recordHistory = (tasks) => {
-            const stateStr = JSON.stringify(tasks);
-            if (window.APP_STATE.historyIndex >= 0 && window.APP_STATE.history[window.APP_STATE.historyIndex] === stateStr) return;
-            
-            if (window.APP_STATE.historyIndex < window.APP_STATE.history.length - 1) {
-                window.APP_STATE.history = window.APP_STATE.history.slice(0, window.APP_STATE.historyIndex + 1);
-            }
-            
-            window.APP_STATE.history.push(stateStr);
-            window.APP_STATE.historyIndex++;
-            
-            if (window.APP_STATE.history.length > 50) {
-                window.APP_STATE.history.shift();
-                window.APP_STATE.historyIndex--;
-            }
-        };
-
-        window.triggerHistorySave = () => {
-            clearTimeout(window.APP_STATE.historyTimeout);
-            window.APP_STATE.historyTimeout = setTimeout(() => {
-                if (window.APP_STATE.isUndoRedoAction) return;
-                window.recordHistory(window.APP_STATE.rawTasks);
-            }, 400); 
-        };
-
-        window.restoreState = async (stateJSON) => {
-            window.APP_STATE.isUndoRedoAction = true;
-            clearTimeout(window.APP_STATE.historyTimeout);
-            
-            const targetState = JSON.parse(stateJSON);
-            const currentState = window.APP_STATE.rawTasks;
-            
-            const batch = writeBatch(db);
-            const targetMap = new Map(targetState.map(t => [t.id, t]));
-            const currentMap = new Map(currentState.map(t => [t.id, t]));
-            
-            let hasChanges = false;
-
-            targetState.forEach(t => {
-                const ref = doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, t.id);
-                if (currentMap.has(t.id)) {
-                    if(JSON.stringify(t) !== JSON.stringify(currentMap.get(t.id))) {
-                        batch.update(ref, t);
-                        hasChanges = true;
-                    }
-                } else {
-                    batch.set(ref, t);
-                    hasChanges = true;
-                }
-            });
-            
-            currentState.forEach(t => {
-                if (!targetMap.has(t.id)) {
-                    const ref = doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, t.id);
-                    batch.delete(ref);
-                    hasChanges = true;
-                }
-            });
-            
-            if(hasChanges) {
-                L("상태 되돌리기 중...");
-                await batch.commit();
-            }
-            
-            setTimeout(() => { 
-                window.APP_STATE.isUndoRedoAction = false; 
-                H(); 
-            }, 800);
-        };
-
-        window.undo = () => {
-            if (window.APP_STATE.historyIndex > 0) {
-                window.APP_STATE.historyIndex--;
-                window.restoreState(window.APP_STATE.history[window.APP_STATE.historyIndex]);
-            } else {
-                window.showAlert("더 이상 실행 취소할 내역이 없습니다.");
-            }
-        };
-
-        window.redo = () => {
-            if (window.APP_STATE.historyIndex < window.APP_STATE.history.length - 1) {
-                window.APP_STATE.historyIndex++;
-                window.restoreState(window.APP_STATE.history[window.APP_STATE.historyIndex]);
-            } else {
-                window.showAlert("더 이상 다시 실행할 내역이 없습니다.");
-            }
-        };
-
-        // v4.6.3: 더블 클릭 시 수정 모드 켜기/끄기 글로벌 함수
-        window.enableEditFromTd = (td) => {
-            const input = td.querySelector('.editable-cell');
-            if (input && !input.disabled) {
-                input.classList.add('editing');
-                if(input.tagName === 'INPUT') input.removeAttribute('readonly');
-                input.focus();
-                // 편집 중일 때는 행 드래그 기능을 막아 텍스트 드래그가 가능하도록 함
-                const tr = td.closest('tr');
-                if(tr) tr.draggable = false;
-            }
-        };
-
-        window.disableEdit = (input) => {
-            input.classList.remove('editing');
-            if(input.tagName === 'INPUT') input.setAttribute('readonly', 'true');
-            // 편집이 끝나면 행 드래그 기능 다시 활성화
-            const tr = input.closest('tr');
-            if(tr) tr.draggable = true;
-        };
 
         // Auth
         window.loginWithGoogle = async () => { try { L(); await signInWithPopup(auth, provider); } catch(e) { H(); window.showAlert(e.message); } };
@@ -723,13 +578,6 @@
             const meta = window.APP_STATE.projList.find(p=>p.id===id);
             document.getElementById('project-title-display').innerText = meta.title; 
             document.getElementById('task-filter-select').value = 'all'; // 필터 초기화
-            
-            // 프로젝트 전환 시 히스토리 초기화
-            window.APP_STATE.history = [];
-            window.APP_STATE.historyIndex = -1;
-            window.APP_STATE.isUndoRedoAction = false;
-            clearTimeout(window.APP_STATE.historyTimeout);
-
             showView('view-project');
             if(window.APP_STATE.unsubs.task) window.APP_STATE.unsubs.task();
             L("작업 로드 중...");
@@ -741,18 +589,7 @@
                     const pa = (a.wbs||'').split('.').map(Number); const pb = (b.wbs||'').split('.').map(Number);
                     for(let i=0; i<Math.max(pa.length, pb.length); i++) { if((pa[i]||0) !== (pb[i]||0)) return (pa[i]||0) - (pb[i]||0); } return 0;
                 });
-                
-                buildTreeAndRollup(); 
-                renderGanttUI(); 
-                H();
-
-                // 히스토리 기록 연동
-                if (window.APP_STATE.history.length === 0) {
-                    window.recordHistory(window.APP_STATE.rawTasks);
-                } else {
-                    window.triggerHistorySave();
-                }
-
+                buildTreeAndRollup(); renderGanttUI(); H();
             }, e=> { H(); window.showAlert("작업 로드 실패"); });
         };
         window.backToDashboard = () => { 
@@ -919,45 +756,6 @@
             }
         }
 
-        // v4.6.3: 텍스트 수정창이 아닌 곳을 누를 때만 행 선택 (더블클릭 편집 모드 대응 및 드래그 방지 우회)
-        window.selectRow = (e, id, idx) => {
-            // 버튼, 아이콘, 리사이저 등 클릭 시 무시
-            if(e.target.closest('button') || e.target.closest('a') || e.target.classList.contains('link-handle') || e.target.classList.contains('resize-handle')) return;
-            
-            // 현재 편집 중인 셀(포커스가 있는 상태)을 누른 거라면 행 선택 동작 무시 (드래그나 텍스트 선택 가능하도록)
-            if (e.target.classList.contains('editable-cell') && e.target.classList.contains('editing')) return;
-
-            const set = window.APP_STATE.selectedTasks;
-            const isCheckboxClick = e.target.closest('.col-checkbox');
-            const isSelected = set.has(id);
-            
-            // 다중 선택 키나 체크박스를 직접 누른 것이 아니라면 기존 선택 모두 해제
-            if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !isCheckboxClick) {
-                set.clear(); 
-            }
-            
-            // Shift 범위 선택
-            if (e.shiftKey && window.APP_STATE.lastCheckedIdx !== null) {
-                const visible = window.APP_STATE.visibleTasks || [];
-                const start = Math.min(window.APP_STATE.lastCheckedIdx, idx); 
-                const end = Math.max(window.APP_STATE.lastCheckedIdx, idx);
-                for(let i=start; i<=end; i++) { 
-                    if(visible[i]) set.add(visible[i].id); 
-                }
-            } else {
-                // 체크박스를 누른 경우 상태 반전, 일반 영역은 Ctrl 클릭 시에만 반전
-                if (isCheckboxClick) {
-                    if (isSelected) set.delete(id);
-                    else set.add(id);
-                } else {
-                    if (isSelected && (e.ctrlKey || e.metaKey)) set.delete(id);
-                    else set.add(id);
-                }
-                window.APP_STATE.lastCheckedIdx = idx;
-            }
-            renderGanttUI();
-        };
-
         function renderGanttUI() {
             const list = document.getElementById('task-list'); list.innerHTML = '';
             const hdr = document.getElementById('gantt-header'); hdr.innerHTML = '';
@@ -1006,6 +804,7 @@
                 if(!isHidden) visibleTasks.push(t);
             }
             
+            // 화면에 보이는 항목들을 전역 상태로 저장 (Shift-Click 범위 지정을 위함)
             window.APP_STATE.visibleTasks = visibleTasks;
 
             visibleTasks.forEach((t, idx) => {
@@ -1015,12 +814,7 @@
                 
                 const tr = document.createElement('tr');
                 tr.className = `draggable-row border-b border-gray-300 h-8 ${isChecked ? 'selected-row' : ''}`;
-                tr.draggable = true; 
-                tr.dataset.id = t.id; 
-                tr.dataset.idx = idx;
-                
-                // 행 클릭 이벤트 연결
-                tr.addEventListener('click', (e) => window.selectRow(e, t.id, idx));
+                tr.draggable = true; tr.dataset.id = t.id; tr.dataset.idx = idx;
                 
                 tr.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', t.id); tr.classList.add('opacity-50'); });
                 tr.addEventListener('dragend', () => { tr.classList.remove('opacity-50'); document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el=>el.classList.remove('drag-over-top', 'drag-over-bottom')); });
@@ -1037,57 +831,54 @@
                     window.reorderTasks(dragId, t.id, dropAfter);
                 });
 
+                // 현재 선행 작업의 WBS 번호 찾기
                 const predTaskObj = t.predecessor ? window.APP_STATE.rawTasks.find(x => x.id === t.predecessor) : null;
                 const predWbsStr = predTaskObj ? predTaskObj.wbs : '';
 
-                // v4.6.3: 더블 클릭 시 수정 모드(enableEdit) 켜고, 포커스 아웃 시 끄기(disableEdit)
+                // 더블 클릭(ondblclick) 시 수정 가능한 읽기 전용 템플릿 헬퍼
                 const inputTemplate = (type, val, field, isParent, extraCls="", extraAttrs="") => {
                     const isDisabled = isParent && (field==='start'||field==='end'||field==='duration'||field==='progress');
-                    if (isDisabled) {
-                        return `<input type="${type}" value="${val}" disabled class="cell-input ${extraCls}" ${extraAttrs}>`;
-                    }
-                    return `<input type="${type}" value="${val}" readonly 
-                        onblur="window.disableEdit(this)" 
+                    return `<input type="${type}" value="${val}" ${isDisabled ? 'disabled' : 'readonly'} 
+                        ondblclick="if(!this.disabled){this.removeAttribute('readonly'); this.focus();}" 
+                        onblur="this.setAttribute('readonly', true);" 
                         onchange="${field==='start'||field==='end'||field==='duration' ? `window.updateTaskDate('${t.id}', '${field}', this.value)` : (field==='predecessor' ? `window.updatePredecessorByWBS('${t.id}', this.value)` : `window.updateTask('${t.id}', '${field}', this.value)`)}" 
-                        class="cell-input editable-cell ${extraCls}" ${extraAttrs}>`;
+                        class="cell-input ${extraCls}" ${extraAttrs}>`;
                 };
 
                 tr.innerHTML = `
-                    <td class="p-0 text-center border-r border-gray-300 bg-gray-50 cursor-pointer col-checkbox">
+                    <td class="p-0 text-center border-r border-gray-300 bg-gray-50 cursor-pointer col-checkbox" onclick="window.toggleTaskSelect(event, '${t.id}', ${idx})">
                         <input type="checkbox" value="${t.id}" ${isChecked?'checked':''} class="pointer-events-none accent-blue-600 scale-90">
                     </td>
                     <td class="p-0 text-center text-xs text-gray-500 border-r border-gray-300 font-mono col-wbs">${t.wbs||'-'}</td>
-                    <td class="p-0 border-r border-gray-300 col-name" ondblclick="window.enableEditFromTd(this)">
+                    <td class="p-0 border-r border-gray-300 col-name">
                         <div class="flex items-center h-full w-full" style="padding-left:${depth*1}rem">
                             ${t.isParent ? `<button onclick="window.toggleCollapse('${t.wbs}')" class="w-4 flex-shrink-0 text-gray-500 hover:text-gray-800 outline-none"><i class="fa-solid ${isCollapsed?'fa-plus-square':'fa-minus-square'}"></i></button>` : `<span class="w-4 flex-shrink-0 inline-block"></span>`}
                             ${inputTemplate('text', t.name||'', 'name', false, `truncate ${t.isParent?'font-bold':''}`)}
                         </div>
                     </td>
-                    <td class="p-0 border-r border-gray-300 col-duration" ondblclick="window.enableEditFromTd(this)">${inputTemplate('number', t.duration||1, 'duration', t.isParent, 'text-center', 'min="1"')}</td>
-                    <td class="p-0 border-r border-gray-300 col-start" ondblclick="window.enableEditFromTd(this)">${inputTemplate('date', t.start||'', 'start', t.isParent, 'text-center')}</td>
-                    <td class="p-0 border-r border-gray-300 col-end" ondblclick="window.enableEditFromTd(this)">${inputTemplate('date', t.end||'', 'end', t.isParent, 'text-center')}</td>
-                    <td class="p-0 border-r border-gray-300 relative col-progress" ondblclick="window.enableEditFromTd(this)">
+                    <td class="p-0 border-r border-gray-300 col-duration">${inputTemplate('number', t.duration||1, 'duration', t.isParent, 'text-center', 'min="1"')}</td>
+                    <td class="p-0 border-r border-gray-300 col-start">${inputTemplate('date', t.start||'', 'start', t.isParent, 'text-center')}</td>
+                    <td class="p-0 border-r border-gray-300 col-end">${inputTemplate('date', t.end||'', 'end', t.isParent, 'text-center')}</td>
+                    <td class="p-0 border-r border-gray-300 relative col-progress">
                         ${inputTemplate('number', t.progress||0, 'progress', t.isParent, `text-center font-semibold text-${t.progress===100?'emerald':'blue'}-600 pr-3`)}
                         <span class="absolute right-2 top-1.5 text-gray-400 pointer-events-none text-[10px]">%</span>
                     </td>
-                    <td class="p-0 border-r border-gray-300 col-predecessor" ondblclick="window.enableEditFromTd(this)">
+                    <td class="p-0 border-r border-gray-300 col-predecessor">
                         ${inputTemplate('text', predWbsStr, 'predecessor', false, 'text-center text-gray-600 font-mono', 'placeholder="WBS"')}
                     </td>
-                    <td class="p-0 border-r border-gray-300 col-manager" ondblclick="window.enableEditFromTd(this)">${inputTemplate('text', t.manager||'', 'manager', false, 'text-center text-gray-600')}</td>
-                    <td class="p-0 border-r border-gray-300 col-priority" ondblclick="window.enableEditFromTd(this)">
-                        <select onblur="window.disableEdit(this)"
-                                onchange="window.updateTask('${t.id}', 'priority', this.value)"
-                                class="cell-input editable-cell text-gray-600 cursor-pointer text-center">
+                    <td class="p-0 border-r border-gray-300 col-manager">${inputTemplate('text', t.manager||'', 'manager', false, 'text-center text-gray-600')}</td>
+                    <td class="p-0 border-r border-gray-300 col-priority">
+                        <select onchange="window.updateTask('${t.id}', 'priority', this.value)" class="cell-input text-gray-600 cursor-pointer text-center">
                             <option value="low" ${t.priority==='low'?'selected':''}>낮음</option>
                             <option value="normal" ${!t.priority || t.priority==='normal'?'selected':''}>보통</option>
                             <option value="high" ${t.priority==='high'?'selected':''}>높음</option>
                         </select>
                     </td>
-                    <td class="p-0 border-r border-gray-300 col-notes" ondblclick="window.enableEditFromTd(this)">${inputTemplate('text', t.notes||'', 'notes', false, 'text-gray-600', 'placeholder="메모"')}</td>
-                    <td class="p-0 border-r border-gray-300 col-link" ondblclick="window.enableEditFromTd(this)">
+                    <td class="p-0 border-r border-gray-300 col-notes">${inputTemplate('text', t.notes||'', 'notes', false, 'text-gray-600', 'placeholder="메모"')}</td>
+                    <td class="p-0 border-r border-gray-300 col-link">
                         <div class="flex items-center h-full w-full px-1 gap-1">
-                            ${inputTemplate('url', t.link||'', 'link', false, 'truncate flex-1', 'placeholder="URL"')}
-                            ${t.link ? `<a href="${t.link.startsWith('http') ? t.link : 'https://'+t.link}" target="_blank" title="산출물 열기" class="text-blue-500 hover:text-blue-700 shrink-0 px-1" style="pointer-events: auto;"><i class="fa-solid fa-file-lines"></i></a>` : ''}
+                            ${inputTemplate('url', t.link||'', 'link', false, 'truncate flex-1', 'placeholder="드라이브 URL"')}
+                            ${t.link ? `<a href="${t.link.startsWith('http') ? t.link : 'https://'+t.link}" target="_blank" title="산출물 열기" class="text-blue-500 hover:text-blue-700 shrink-0 px-1"><i class="fa-solid fa-file-lines"></i></a>` : ''}
                         </div>
                     </td>
                 `;
@@ -1106,12 +897,10 @@
             
             const totalDays = Math.max(40, diffDays(minD, maxD));
             const totalWidth = totalDays * 30; // 30px per day
-            
-            const totalHeightCSS = `max(100%, ${visibleTasks.length * 32 + 80}px)`;
 
+            // 횡스크롤을 위한 컨테이너 너비 지정
             hdr.style.width = `${totalWidth}px`;
             bdy.style.width = `${totalWidth}px`;
-            bdy.style.height = totalHeightCSS;
             svg.style.width = `${totalWidth}px`;
             
             for(let i=0; i<totalDays; i++) {
@@ -1177,17 +966,6 @@
                     svg.appendChild(path);
                 }
             });
-
-            // v4.6.3: 새 작업 추가 시 맨 아래로 자동 스크롤
-            if (window.APP_STATE.scrollToBottom) {
-                setTimeout(() => {
-                    const leftPanel = document.getElementById('task-list-scroll-area');
-                    const rightPanel = document.getElementById('gantt-scroll-area');
-                    if (leftPanel) leftPanel.scrollTop = leftPanel.scrollHeight;
-                    if (rightPanel) rightPanel.scrollTop = rightPanel.scrollHeight;
-                    window.APP_STATE.scrollToBottom = false;
-                }, 100);
-            }
         }
 
         // ================= 간트 마우스 드래그 (이동 및 리사이즈) =================
@@ -1253,6 +1031,7 @@
             const curX = e.clientX - linkDragInfo.svgRect.left + linkDragInfo.scrollArea.scrollLeft;
             const curY = e.clientY - linkDragInfo.svgRect.top;
             
+            // 베지어 곡선으로 그리기
             const d = `M ${linkDragInfo.startX} ${linkDragInfo.startY} C ${linkDragInfo.startX + 50} ${linkDragInfo.startY}, ${curX - 50} ${curY}, ${curX} ${curY}`;
             linkDragInfo.tempLine.setAttribute('d', d);
         }
@@ -1265,6 +1044,7 @@
             if(!linkDragInfo) return;
             linkDragInfo.tempLine.remove();
             
+            // 마우스를 놓은 위치의 요소 찾기
             const el = document.elementFromPoint(e.clientX, e.clientY);
             const targetBar = el ? el.closest('.gantt-bar') : null;
 
@@ -1302,32 +1082,15 @@
         // ================= 데이터 편집 =================
         window.addNewTask = async () => {
             const raw = window.APP_STATE.rawTasks; let maxWbs = 0; raw.forEach(t=>{ const v=parseInt((t.wbs||'0').split('.')[0]); if(v>maxWbs) maxWbs=v; });
-            
-            L();
             await addDoc(collection(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`), {
                 wbs:(maxWbs+1).toString(), name:'새 작업', duration:1, start:toISODate(new Date()), end:toISODate(new Date()), progress:0, priority: 'normal', notes: '', link: ''
             });
-            H();
-            window.APP_STATE.scrollToBottom = true; // 다음 렌더링 시 맨 밑으로 스크롤 지시
         };
         
         window.updateTask = async (id, field, val) => {
             let v = val; if(field==='progress') v = Math.min(100, Math.max(0, parseInt(val)||0));
             let updateData = { [field]: v };
-
-            if (field === 'predecessor' && v) {
-                const predTask = window.APP_STATE.rawTasks.find(x => x.id === v);
-                const currTask = window.APP_STATE.rawTasks.find(x => x.id === id);
-                if (predTask && predTask.end) {
-                    updateData.start = addDays(predTask.end, 1);
-                    updateData.end = addDays(updateData.start, (currTask.duration || 1) - 1);
-                }
-            } else if (field === 'predecessor' && !v) {
-                updateData.predecessor = null;
-            }
-
             await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, id), updateData);
-            if (updateData.end) window.cascadeDates(id, updateData.end);
         };
 
         // WBS 텍스트 직접 입력으로 선행 작업 연동하기
@@ -1462,6 +1225,32 @@
             renderGanttUI();
         };
         
+        // 화면에 보이는 (Visible) 태스크 기준으로 Shift 다중 선택 적용
+        window.toggleTaskSelect = (e, id, idx) => {
+            if(e.target.tagName !== 'INPUT') {
+                const chk = e.currentTarget.querySelector('input');
+                if (chk) chk.checked = !chk.checked;
+            }
+            const isChecked = e.currentTarget.querySelector('input') ? e.currentTarget.querySelector('input').checked : e.target.checked;
+            const set = window.APP_STATE.selectedTasks;
+            const visible = window.APP_STATE.visibleTasks || [];
+            
+            if(e.shiftKey && window.APP_STATE.lastCheckedIdx !== null && visible.length > 0) {
+                const start = Math.min(window.APP_STATE.lastCheckedIdx, idx); 
+                const end = Math.max(window.APP_STATE.lastCheckedIdx, idx);
+                for(let i=start; i<=end; i++) { 
+                    if(visible[i]) {
+                        if(isChecked) set.add(visible[i].id); 
+                        else set.delete(visible[i].id); 
+                    }
+                }
+            } else {
+                if(isChecked) set.add(id); else set.delete(id);
+                window.APP_STATE.lastCheckedIdx = idx;
+            }
+            renderGanttUI();
+        };
+
         window.indentSelected = async () => {
             if(window.APP_STATE.selectedTasks.size === 0) return window.showAlert("선택된 작업이 없습니다.");
             
@@ -1611,30 +1400,8 @@
             window.print();
         };
 
-        // Scroll sync (좌/우 패널 세로 스크롤 동기화 추가)
-        let isSyncingLeft = false;
-        let isSyncingRight = false;
-
-        window.syncVerticalScroll = (source) => {
-            const left = document.getElementById('task-list-scroll-area');
-            const right = document.getElementById('gantt-scroll-area');
-            const header = document.getElementById('gantt-header-container');
-
-            if (source === 'right') {
-                if (header) header.scrollLeft = right.scrollLeft;
-                if (!isSyncingRight) {
-                    isSyncingLeft = true;
-                    if (left) left.scrollTop = right.scrollTop;
-                }
-                isSyncingRight = false;
-            } else if (source === 'left') {
-                if (!isSyncingLeft) {
-                    isSyncingRight = true;
-                    if (right) right.scrollTop = left.scrollTop;
-                }
-                isSyncingLeft = false;
-            }
-        };
+        // Scroll sync
+        window.syncScroll = () => { document.getElementById('gantt-header-container').scrollLeft = document.getElementById('gantt-scroll-area').scrollLeft; };
         
         // Resizer (Left Panel)
         let isResizing = false;
