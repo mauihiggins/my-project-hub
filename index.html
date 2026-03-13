@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.3.0</title>
+    <title>프로젝트 매니저 - v4.3.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -75,7 +75,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.3.0</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.3.1</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -327,10 +327,10 @@
         const auth = getAuth(app); const db = getFirestore(app); const provider = new GoogleAuthProvider();
         const GLOBAL_APP_ID = 'gantt-google-auth-v1';
 
-        // 상태 관리
+        // 상태 관리 (visibleTasks 추가)
         window.APP_STATE = { 
             user: null, wsList: [], curWs: null, curWsMeta: null, projList: [], curProjId: null, 
-            rawTasks: [], tasksTree: [], selectedTasks: new Set(), lastCheckedIdx: null, unsubs: {},
+            rawTasks: [], visibleTasks: [], selectedTasks: new Set(), lastCheckedIdx: null, unsubs: {},
             hiddenCols: new Set(), isRestored: false, isRestoringProj: false
         };
 
@@ -580,7 +580,7 @@
                 window.APP_STATE.rawTasks = snap.docs.map(d=>({id:d.id, ...d.data()}));
                 window.APP_STATE.rawTasks.sort((a,b) => {
                     const pa = (a.wbs||'').split('.').map(Number); const pb = (b.wbs||'').split('.').map(Number);
-                    for(let i=0; i<Math.max(pa.length, pb.length); i++) { if(pa[i]!==pb[i]) return (pa[i]||0) - (pb[i]||0); } return 0;
+                    for(let i=0; i<Math.max(pa.length, pb.length); i++) { if((pa[i]||0) !== (pb[i]||0)) return (pa[i]||0) - (pb[i]||0); } return 0;
                 });
                 buildTreeAndRollup(); renderGanttUI(); H();
             }, e=> { H(); window.showAlert("작업 로드 실패"); });
@@ -637,6 +637,38 @@
                 document.body.style.cursor = '';
             }
         });
+
+        // WBS 번호 재계산 알고리즘 (들여쓰기/내어쓰기/이동 완벽 대응)
+        function recalculateAllWBS(depthChangesMap) {
+            const raw = window.APP_STATE.rawTasks;
+            const counts = [];
+            const updates = [];
+
+            for(let i=0; i<raw.length; i++) {
+                const t = raw[i];
+                let currentDepth = getDepth(t.wbs);
+                
+                if (depthChangesMap[t.id]) {
+                    currentDepth += depthChangesMap[t.id];
+                    if (currentDepth < 0) currentDepth = 0;
+                }
+
+                // 상위 작업보다 Depth가 2단계 이상 깊어지는 것 방지
+                const prevDepth = i > 0 ? getDepth(raw[i-1].wbs) + (depthChangesMap[raw[i-1].id] || 0) : -1;
+                if (currentDepth > prevDepth + 1) currentDepth = prevDepth + 1;
+
+                while(counts.length <= currentDepth) counts.push(0);
+                counts.length = currentDepth + 1;
+                counts[currentDepth]++;
+                
+                const newWbs = counts.join('.');
+                if(newWbs !== t.wbs) {
+                    updates.push({ id: t.id, wbs: newWbs });
+                    t.wbs = newWbs; // 메모리에 즉시 적용
+                }
+            }
+            return updates;
+        }
 
         // 자동 일정 변경 연쇄 적용
         window.cascadeDates = async (predId, newPredEnd) => {
@@ -745,6 +777,9 @@
                 if(filterVal === 'active' && (t.progress || 0) === 100) isHidden = true;
                 if(!isHidden) visibleTasks.push(t);
             }
+            
+            // 화면에 보이는 항목들을 전역 상태로 저장 (Shift-Click 범위 지정을 위함)
+            window.APP_STATE.visibleTasks = visibleTasks;
 
             visibleTasks.forEach((t, idx) => {
                 const depth = getDepth(t.wbs);
@@ -985,14 +1020,31 @@
             }
         };
 
+        // WBS 재정렬 시 순서 맞춤 연동
         window.reorderTasks = async (dragId, targetId, dropAfter) => {
             const raw = [...window.APP_STATE.rawTasks];
-            const dragIdx = raw.findIndex(t=>t.id===dragId); const targetIdx = raw.findIndex(t=>t.id===targetId);
+            const dragIdx = raw.findIndex(t=>t.id===dragId); 
+            const targetIdx = raw.findIndex(t=>t.id===targetId);
             if(dragIdx<0 || targetIdx<0) return;
+            
             const [dragItem] = raw.splice(dragIdx, 1);
-            raw.splice(raw.findIndex(t=>t.id===targetId) + (dropAfter?1:0), 0, dragItem);
+            let insertIdx = raw.findIndex(t=>t.id===targetId) + (dropAfter?1:0);
+            raw.splice(insertIdx, 0, dragItem);
+            
+            window.APP_STATE.rawTasks = raw;
+
+            const depthChanges = {};
+            if(insertIdx > 0) {
+                const prevDepth = getDepth(raw[insertIdx-1].wbs);
+                const curDepth = getDepth(dragItem.wbs);
+                depthChanges[dragId] = prevDepth - curDepth;
+            } else {
+                depthChanges[dragId] = -getDepth(dragItem.wbs); 
+            }
+
+            const updates = recalculateAllWBS(depthChanges);
             const batch = writeBatch(db);
-            raw.forEach((t, i) => batch.update(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, t.id), { wbs: (i+1).toString() }));
+            updates.forEach(u => batch.update(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, u.id), { wbs: u.wbs }));
             await batch.commit();
         };
 
@@ -1009,6 +1061,7 @@
             renderGanttUI();
         };
         
+        // 화면에 보이는 (Visible) 태스크 기준으로 Shift 다중 선택 적용
         window.toggleTaskSelect = (e, id, idx) => {
             if(e.target.tagName !== 'INPUT') {
                 const chk = e.currentTarget.querySelector('input');
@@ -1016,47 +1069,63 @@
             }
             const isChecked = e.currentTarget.querySelector('input').checked;
             const set = window.APP_STATE.selectedTasks;
+            const visible = window.APP_STATE.visibleTasks || [];
             
-            if(e.shiftKey && window.APP_STATE.lastCheckedIdx !== null) {
-                const start = Math.min(window.APP_STATE.lastCheckedIdx, idx); const end = Math.max(window.APP_STATE.lastCheckedIdx, idx);
-                for(let i=start; i<=end; i++) { if(isChecked) set.add(window.APP_STATE.rawTasks[i].id); else set.delete(window.APP_STATE.rawTasks[i].id); }
+            if(e.shiftKey && window.APP_STATE.lastCheckedIdx !== null && visible.length > 0) {
+                const start = Math.min(window.APP_STATE.lastCheckedIdx, idx); 
+                const end = Math.max(window.APP_STATE.lastCheckedIdx, idx);
+                for(let i=start; i<=end; i++) { 
+                    if(visible[i]) {
+                        if(isChecked) set.add(visible[i].id); 
+                        else set.delete(visible[i].id); 
+                    }
+                }
             } else {
                 if(isChecked) set.add(id); else set.delete(id);
+                window.APP_STATE.lastCheckedIdx = idx;
             }
-            window.APP_STATE.lastCheckedIdx = idx;
             renderGanttUI();
         };
 
         window.indentSelected = async () => {
             if(window.APP_STATE.selectedTasks.size === 0) return window.showAlert("선택된 작업이 없습니다.");
-            const raw = window.APP_STATE.rawTasks; const batch = writeBatch(db); let updated = false;
-            raw.forEach((t, i) => {
-                if(window.APP_STATE.selectedTasks.has(t.id) && i > 0) {
-                    const prev = raw[i-1]; const prevDepth = getDepth(prev.wbs); const curDepth = getDepth(t.wbs);
-                    if(curDepth <= prevDepth) {
-                        let base = prev.wbs; if(curDepth < prevDepth) { base = prev.wbs.split('.').slice(0, curDepth+1).join('.'); }
-                        const siblings = raw.filter(x=>isParentOf(base, x.wbs) && getDepth(x.wbs)===getDepth(base)+1);
-                        batch.update(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`,t.id), {wbs:`${base}.${siblings.length+1}`}); updated = true;
-                    }
-                }
-            });
-            if(updated) await batch.commit(); window.APP_STATE.selectedTasks.clear();
+            
+            const depthChanges = {};
+            const raw = window.APP_STATE.rawTasks;
+            if(raw.length > 0 && window.APP_STATE.selectedTasks.has(raw[0].id)) {
+                 window.APP_STATE.selectedTasks.delete(raw[0].id);
+            }
+
+            window.APP_STATE.selectedTasks.forEach(id => depthChanges[id] = 1);
+            const updates = recalculateAllWBS(depthChanges);
+            
+            if(updates.length > 0) {
+                const batch = writeBatch(db);
+                updates.forEach(u => {
+                    batch.update(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`,u.id), {wbs:u.wbs});
+                });
+                await batch.commit();
+            }
+            window.APP_STATE.selectedTasks.clear();
+            renderGanttUI();
         };
 
         window.outdentSelected = async () => {
             if(window.APP_STATE.selectedTasks.size === 0) return window.showAlert("선택된 작업이 없습니다.");
-            const raw = window.APP_STATE.rawTasks; const batch = writeBatch(db); let updated = false;
-            raw.forEach((t, i) => {
-                if(window.APP_STATE.selectedTasks.has(t.id)) {
-                    if(getDepth(t.wbs) > 0) {
-                        const newBase = t.wbs.split('.').slice(0,-1).join('.'); let maxSibling = 0;
-                        raw.forEach(x=>{ if(isParentOf(newBase.split('.').slice(0,-1).join('.')||'0', x.wbs) && getDepth(x.wbs)===getDepth(newBase)) { const v=parseInt(x.wbs.split('.').pop()); if(v>maxSibling) maxSibling=v; }});
-                        const newWbs = getDepth(newBase)===0 ? (maxSibling+1).toString() : `${newBase.split('.').slice(0,-1).join('.')}.${maxSibling+1}`;
-                        batch.update(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`,t.id), {wbs:newWbs}); updated = true;
-                    }
-                }
-            });
-            if(updated) await batch.commit(); window.APP_STATE.selectedTasks.clear();
+            
+            const depthChanges = {};
+            window.APP_STATE.selectedTasks.forEach(id => depthChanges[id] = -1);
+            const updates = recalculateAllWBS(depthChanges);
+            
+            if(updates.length > 0) {
+                const batch = writeBatch(db);
+                updates.forEach(u => {
+                    batch.update(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`,u.id), {wbs:u.wbs});
+                });
+                await batch.commit();
+            }
+            window.APP_STATE.selectedTasks.clear();
+            renderGanttUI();
         };
 
         // ================= 전문적인 보고서 대시보드 =================
