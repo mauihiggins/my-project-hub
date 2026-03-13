@@ -3,146 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - 워크스페이스 에디션</title>
+    <title>프로젝트 매니저 - v4.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
-        
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        .gantt-container { position: relative; min-height: 100%; background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px); background-size: 40px 100%; }
-        .gantt-bar { position: absolute; height: 28px; border-radius: 6px; background-color: #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; overflow: hidden; transition: all 0.2s ease; cursor: pointer; }
-        .gantt-progress { height: 100%; background-color: rgba(0, 0, 0, 0.2); border-right: 1px solid rgba(255,255,255,0.3); }
-        .gantt-label { position: absolute; left: 8px; color: white; font-size: 10px; font-weight: 500; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        /* Gantt Styles */
+        .gantt-container { position: relative; min-height: 100%; background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px); background-size: 40px 100%; user-select: none; }
+        .gantt-bar { position: absolute; height: 24px; border-radius: 4px; background-color: #818cf8; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; overflow: visible; cursor: grab; transition: opacity 0.2s, background-color 0.2s; }
+        .gantt-bar:active { cursor: grabbing; opacity: 0.9; }
+        .gantt-bar.is-parent { background-color: #4f46e5; height: 14px; border-radius: 2px; top: 5px; cursor: default; } /* 부모 작업 진하게 */
+        .gantt-progress { height: 100%; background-color: rgba(0, 0, 0, 0.25); border-right: 1px solid rgba(255,255,255,0.4); border-radius: 4px 0 0 4px; pointer-events: none; }
+        .is-parent .gantt-progress { border-radius: 2px 0 0 2px; }
+        .gantt-label { position: absolute; left: 8px; color: white; font-size: 10px; font-weight: bold; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5); pointer-events: none; }
         
-        #loading-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
+        /* Resize handle for Gantt Bar */
+        .resize-handle { position: absolute; right: 0; top: 0; width: 10px; height: 100%; cursor: ew-resize; background: linear-gradient(to left, rgba(255,255,255,0.4) 0%, transparent 100%); border-radius: 0 4px 4px 0; }
+        .resize-handle:hover { background: rgba(255,255,255,0.5); }
+        .is-parent .resize-handle { display: none; } /* 부모는 수동 리사이즈 불가 (롤업) */
+
+        /* Table Drag & Drop Styles */
+        tr.draggable-row { cursor: grab; }
+        tr.draggable-row:active { cursor: grabbing; }
+        tr.drag-over-top { border-top: 2px solid #4f46e5; }
+        tr.drag-over-bottom { border-bottom: 2px solid #4f46e5; }
+        
+        #loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; }
         .hidden { display: none !important; }
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 1000; display: flex; justify-content: center; align-items: center; }
         .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+        .truncate-cell { max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
 </head>
 <body>
 
     <!-- Header -->
-    <header class="bg-indigo-900 text-white p-4 shadow-md flex justify-between items-center shrink-0 z-50">
+    <header class="bg-indigo-900 text-white p-3 shadow-md flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer" onclick="window.goHome()">
-            <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-inner">
-                <i class="fa-solid fa-layer-group text-lg"></i>
-            </div>
-            <!-- 완전히 새로고침 되었음을 알리는 v3.0 마크 -->
-            <h1 class="text-xl font-bold tracking-tight">Project Hub <span class="text-indigo-200 font-bold text-sm ml-1 bg-indigo-700 px-2 py-0.5 rounded-full border border-indigo-500">v3.0</span></h1>
+            <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-inner"><i class="fa-solid fa-layer-group"></i></div>
+            <h1 class="text-lg font-bold">Project Hub <span class="text-indigo-200 font-bold text-xs ml-1 bg-indigo-700 px-2 py-0.5 rounded-full border border-indigo-500">v4.0</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4">
-            <button id="btn-google-login" onclick="window.loginWithGoogle()" class="hidden bg-white text-gray-800 hover:bg-gray-100 px-4 py-2 rounded-full text-sm font-bold shadow-sm transition flex items-center gap-2">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4" alt="Google"> 로그인
-            </button>
-            
+            <button id="btn-google-login" onclick="window.loginWithGoogle()" class="hidden bg-white text-gray-800 hover:bg-gray-100 px-4 py-1.5 rounded-full text-sm font-bold shadow transition flex items-center gap-2"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4"> 로그인</button>
             <div id="user-profile" class="hidden flex items-center gap-3">
-                <div class="text-right hidden sm:block">
-                    <p id="user-name" class="text-sm font-bold text-white leading-tight"></p>
-                    <p id="user-email" class="text-[10px] text-indigo-300"></p>
-                </div>
-                <img id="user-photo" src="" referrerpolicy="no-referrer" class="w-9 h-9 rounded-full border-2 border-indigo-400 shadow-sm" alt="Profile">
-                <button onclick="window.logout()" class="text-indigo-300 hover:text-white ml-2" title="로그아웃"><i class="fa-solid fa-right-from-bracket"></i></button>
+                <div class="text-right hidden sm:block"><p id="user-name" class="text-sm font-bold text-white"></p></div>
+                <img id="user-photo" src="" referrerpolicy="no-referrer" class="w-8 h-8 rounded-full border-2 border-indigo-400">
+                <button onclick="window.logout()" class="text-indigo-300 hover:text-white ml-1"><i class="fa-solid fa-right-from-bracket"></i></button>
             </div>
         </div>
     </header>
 
     <main class="flex flex-1 overflow-hidden relative">
-        <div id="loading-overlay"><i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-600 mb-4"></i><p class="text-gray-500 font-medium mt-2" id="loading-text">데이터를 불러오는 중입니다...</p></div>
+        <div id="loading-overlay"><i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-600 mb-4"></i><p id="loading-text" class="text-gray-500 font-bold">로딩 중...</p></div>
 
-        <!-- Login View -->
-        <div id="view-login" class="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-6 z-40 hidden">
+        <!-- View 1: Login -->
+        <div id="view-login" class="w-full h-full flex flex-col items-center justify-center bg-gray-50 p-6 hidden">
             <div class="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full border border-gray-100">
-                <div class="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-inner"><i class="fa-solid fa-shield-check"></i></div>
-                <h2 class="text-2xl font-bold text-gray-800 mb-2">팀 워크스페이스 접속</h2>
-                <p class="text-gray-500 text-sm mb-8">안전하게 프로젝트를 공유하려면 로그인하세요.</p>
-                <button onclick="window.loginWithGoogle()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center gap-3 text-lg">
-                    <i class="fa-brands fa-google"></i> 구글로 시작하기
-                </button>
+                <div class="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-6"><i class="fa-solid fa-shield-check"></i></div>
+                <h2 class="text-2xl font-bold mb-2">팀 워크스페이스 접속</h2>
+                <button onclick="window.loginWithGoogle()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-md mt-6 flex justify-center items-center gap-2"><i class="fa-brands fa-google"></i> 구글로 시작하기</button>
             </div>
         </div>
 
-        <!-- Workspaces View -->
+        <!-- View 2: Workspaces -->
         <div id="view-workspaces" class="w-full h-full p-6 md:p-10 overflow-y-auto bg-gray-50 flex flex-col gap-6 hidden">
             <div class="flex justify-between items-end mb-4">
-                <div>
-                    <h2 class="text-3xl font-bold text-gray-800 tracking-tight">나의 워크스페이스</h2>
-                    <p class="text-sm text-gray-500 mt-1">내가 관리하거나 참여 중인 워크스페이스입니다.</p>
-                </div>
-                <button onclick="window.openModal('modal-ws-create')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-lg shadow-md transition flex items-center gap-2">
-                    <i class="fa-solid fa-plus"></i> 새 워크스페이스
-                </button>
+                <div><h2 class="text-3xl font-bold text-gray-800">나의 워크스페이스</h2></div>
+                <button onclick="window.openModal('modal-ws-create')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md flex items-center gap-2"><i class="fa-solid fa-plus"></i> 워크스페이스 생성</button>
             </div>
-            <div id="workspaces-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10"></div>
+            <div id="workspaces-grid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-10"></div>
         </div>
 
-        <!-- Dashboard View (Projects list) -->
-        <div id="view-dashboard" class="w-full h-full p-6 md:p-10 overflow-y-auto bg-gray-50 flex flex-col gap-6 hidden">
+        <!-- View 3: Dashboard (Projects) -->
+        <div id="view-dashboard" class="w-full h-full p-6 md:p-10 overflow-y-auto bg-gray-50 flex flex-col gap-4 hidden">
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-wrap justify-between items-center gap-4">
                 <div class="flex items-center gap-4">
-                    <button onclick="window.goHome()" class="text-gray-400 hover:text-indigo-600 transition p-2 rounded-full hover:bg-indigo-50"><i class="fa-solid fa-arrow-left text-xl"></i></button>
+                    <button onclick="window.goHome()" class="text-gray-400 hover:text-indigo-600 p-2 rounded-full hover:bg-gray-100 transition"><i class="fa-solid fa-arrow-left text-xl"></i></button>
                     <div>
                         <h2 id="current-ws-name" class="text-2xl font-bold text-gray-800 leading-none">워크스페이스</h2>
                         <span id="current-ws-role" class="text-[10px] font-bold text-indigo-500 uppercase bg-indigo-50 px-2 py-0.5 rounded-full mt-1 inline-block"></span>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button id="btn-manage-members" onclick="window.openMembersModal()" class="hidden bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold py-2 px-4 rounded-lg shadow-sm transition items-center gap-2 text-sm">
-                        <i class="fa-solid fa-users"></i> 멤버 관리
-                    </button>
-                    <button onclick="window.openModal('modal-project-create')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition flex items-center gap-2 text-sm">
-                        <i class="fa-solid fa-plus"></i> 프로젝트 추가
-                    </button>
+                    <label class="flex items-center text-sm text-gray-500 mr-4 cursor-pointer font-medium hover:text-gray-800"><input type="checkbox" id="toggle-hidden-projects" class="mr-1.5" onchange="window.renderProjects()"> 숨긴 프로젝트 보기</label>
+                    <button onclick="window.generateDashboardReport()" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-bold py-2 px-3 rounded-lg text-sm transition shadow-sm"><i class="fa-solid fa-chart-pie"></i> 요약 보고서</button>
+                    <button id="btn-manage-members" onclick="window.openMembersModal()" class="hidden bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold py-2 px-3 rounded-lg text-sm shadow-sm"><i class="fa-solid fa-users"></i> 멤버 관리</button>
+                    <button onclick="window.openModal('modal-project-create')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md text-sm"><i class="fa-solid fa-plus"></i> 새 프로젝트</button>
                 </div>
             </div>
             <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
         </div>
 
-        <!-- Project View (Gantt) -->
+        <!-- View 4: Project Gantt -->
         <div id="view-project" class="w-full h-full flex flex-row hidden">
-            <aside id="left-panel" class="bg-white flex flex-col shrink-0 z-10 shadow-lg border-r border-gray-200" style="width: 50%; min-width: 450px;">
-                <div class="bg-indigo-50 p-4 border-b border-indigo-100 flex justify-between items-center shrink-0">
-                    <div class="flex items-center gap-3">
-                        <button onclick="window.backToDashboard()" class="text-indigo-500 hover:text-indigo-800 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-indigo-100"><i class="fa-solid fa-arrow-left"></i></button>
-                        <h2 id="project-title-display" class="text-lg font-bold text-indigo-900 tracking-tight truncate max-w-[200px]">프로젝트</h2>
+            <!-- Left Panel (WBS Table) -->
+            <aside id="left-panel" class="bg-white flex flex-col shrink-0 z-10 shadow-[4px_0_15px_rgba(0,0,0,0.05)] border-r border-gray-200" style="width: 55%; min-width: 650px;">
+                <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center shrink-0">
+                    <div class="flex items-center gap-2">
+                        <button onclick="window.backToDashboard()" class="text-indigo-500 hover:text-indigo-800 p-1.5 rounded-full hover:bg-indigo-100 transition"><i class="fa-solid fa-arrow-left"></i></button>
+                        <h2 id="project-title-display" class="text-lg font-bold text-indigo-900 truncate max-w-[200px]">프로젝트</h2>
                     </div>
-                    <button onclick="window.addNewTask()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow-sm transition flex items-center gap-1"><i class="fa-solid fa-plus"></i> 작업 추가</button>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="window.generateProjectReport()" class="bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 text-xs font-bold py-1.5 px-2 rounded shadow-sm mr-2"><i class="fa-solid fa-file-lines"></i> 프로젝트 보고서</button>
+                        <!-- 들여쓰기/내어쓰기 버튼 (다중 선택 대응) -->
+                        <button onclick="window.indentSelected()" class="bg-white hover:bg-gray-100 text-gray-700 text-xs py-1.5 px-2.5 rounded border shadow-sm" title="하위 작업으로 만들기 (들여쓰기)"><i class="fa-solid fa-indent"></i></button>
+                        <button onclick="window.outdentSelected()" class="bg-white hover:bg-gray-100 text-gray-700 text-xs py-1.5 px-2.5 rounded border shadow-sm mr-2" title="상위 작업으로 만들기 (내어쓰기)"><i class="fa-solid fa-outdent"></i></button>
+                        <button onclick="window.addNewTask()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow-sm"><i class="fa-solid fa-plus"></i> 작업 추가</button>
+                    </div>
                 </div>
                 <div class="flex-1 overflow-y-auto">
-                    <table class="w-full text-sm text-left text-gray-600">
-                        <thead class="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0 z-10 border-b">
+                    <table class="w-full text-xs text-left text-gray-600 border-collapse select-none">
+                        <thead class="text-gray-500 uppercase bg-gray-50 sticky top-0 z-20 border-b border-gray-200 shadow-sm">
                             <tr>
-                                <th class="px-2 py-2 w-12 text-center">WBS</th>
-                                <th class="px-3 py-2">작업명</th>
-                                <th class="px-2 py-2 text-center w-16">진행률</th>
-                                <th class="px-2 py-2 text-center w-10">삭제</th>
+                                <th class="p-2 w-8 text-center"><input type="checkbox" id="check-all" onchange="window.toggleAllTasks(this)" class="cursor-pointer"></th>
+                                <th class="p-2 w-12 text-center">WBS</th>
+                                <th class="p-2 w-48">작업명</th>
+                                <th class="p-2 w-16 text-center">담당자</th>
+                                <th class="p-2 w-20 text-center">시작일</th>
+                                <th class="p-2 w-12 text-center" title="기간(일)">기간</th>
+                                <th class="p-2 w-20 text-center">종료일</th>
+                                <th class="p-2 w-14 text-center">%</th>
+                                <th class="p-2 w-16 text-center" title="선행작업">선행</th>
+                                <th class="p-2 w-8 text-center"></th>
                             </tr>
                         </thead>
                         <tbody id="task-list"></tbody>
                     </table>
                 </div>
             </aside>
-            <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-indigo-400 cursor-col-resize shrink-0 transition-colors"></div>
+            <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-indigo-400 cursor-col-resize shrink-0 transition-colors flex items-center justify-center"><div class="h-8 w-0.5 bg-gray-400 rounded-full"></div></div>
+            <!-- Right Panel (Gantt) -->
             <section id="right-panel" class="flex-1 bg-white overflow-hidden flex flex-col relative">
                 <div id="gantt-empty-state" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-20 hidden">
                     <i class="fa-solid fa-chart-gantt text-5xl text-gray-300 mb-4"></i>
                     <p class="text-gray-500 font-bold">등록된 작업이 없습니다.</p>
-                    <p class="text-xs text-gray-400 mt-1">좌측 상단의 '작업 추가' 버튼을 눌러 시작하세요.</p>
                 </div>
-                <div id="gantt-header-container" class="overflow-hidden border-b border-gray-200 bg-gray-50 shrink-0">
-                    <div id="gantt-header" class="flex relative h-10"></div>
-                </div>
-                <div id="gantt-scroll-area" class="flex-1 overflow-auto relative bg-[#fcfcfc]">
+                <div id="gantt-header-container" class="overflow-hidden border-b border-gray-200 bg-gray-50 shrink-0"><div id="gantt-header" class="flex relative h-10"></div></div>
+                <div id="gantt-scroll-area" class="flex-1 overflow-auto relative bg-[#fcfcfc]" onscroll="window.syncScroll()">
                     <div id="gantt-body" class="gantt-container min-h-full">
                         <svg id="gantt-lines" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-                            <defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="dependency-arrow" fill="#94a3b8" /></marker></defs>
+                            <defs><marker id="arrowhead" markerWidth="6" markerHeight="4" refX="5" refY="2" orient="auto"><polygon points="0 0, 6 2, 0 4" fill="#94a3b8" /></marker></defs>
                         </svg>
                     </div>
                 </div>
@@ -150,624 +157,588 @@
         </div>
     </main>
 
-    <!-- Error Modal for unauthorized domain -->
-    <div id="modal-error" class="hidden modal-overlay">
-        <div class="bg-white rounded-2xl p-8 max-w-md w-full m-4 shadow-2xl text-center">
-            <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-4"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            <h2 class="text-xl font-bold mb-2 text-gray-800">승인되지 않은 도메인</h2>
-            <p class="text-sm text-gray-500 mb-6">보안을 위해 파이어베이스 콘솔에 아래 주소를 <strong>승인된 도메인</strong>으로 등록해야 로그인할 수 있습니다.</p>
-            <div class="bg-gray-50 p-4 rounded-lg text-left text-xs mb-6 border">
-                <p class="font-bold text-gray-700 mb-2">복사할 주소:</p>
-                <div class="flex items-center justify-between bg-white border p-2 rounded">
-                    <code id="current-domain-text" class="text-indigo-600 font-mono font-bold text-[12px] break-all mr-2">도메인 감지 중...</code>
-                    <button onclick="window.copyDomain()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-[10px] font-bold shrink-0 hover:bg-indigo-700 transition">복사</button>
-                </div>
-            </div>
-            <button onclick="window.closeModal('modal-error')" class="w-full bg-gray-200 hover:bg-gray-300 py-2.5 rounded-lg font-bold transition">확인 후 닫기</button>
-        </div>
-    </div>
-
-    <!-- Create Workspace Modal -->
-    <div id="modal-ws-create" class="hidden modal-overlay">
-        <div class="bg-white rounded-2xl p-8 max-w-sm w-full m-4 shadow-2xl">
-            <h2 class="text-xl font-bold mb-4">워크스페이스 생성</h2>
-            <input type="text" id="new-ws-name" class="w-full border p-3 rounded-lg mb-6 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="예: 디자인팀, 신사업TF">
-            <div class="flex justify-end gap-2">
-                <button onclick="window.closeModal('modal-ws-create')" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition">취소</button>
-                <button onclick="window.submitNewWorkspace()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow transition">생성</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Member Management Modal -->
-    <div id="modal-ws-members" class="hidden modal-overlay">
-        <div class="bg-white rounded-2xl p-8 max-w-md w-full m-4 shadow-2xl flex flex-col max-h-[80vh]">
-            <h2 class="text-xl font-bold mb-4"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>팀원 초대 및 관리</h2>
-            <div class="flex gap-2 mb-4">
-                <input type="email" id="new-member-email" class="flex-1 border p-2 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="초대할 구글 이메일">
-                <button onclick="window.addWorkspaceMember()" class="bg-gray-800 hover:bg-black text-white px-4 py-2 rounded-lg font-bold transition">초대</button>
-            </div>
-            <div class="flex-1 overflow-y-auto border rounded-lg bg-gray-50 p-2">
-                <ul id="members-list" class="divide-y divide-gray-200"></ul>
-            </div>
-            <button onclick="window.closeModal('modal-ws-members')" class="mt-6 bg-gray-200 hover:bg-gray-300 py-2 rounded-lg font-bold transition">닫기</button>
-        </div>
-    </div>
-
-    <!-- Create Project Modal -->
-    <div id="modal-project-create" class="hidden modal-overlay">
-        <div class="bg-white rounded-2xl p-8 max-w-sm w-full m-4 shadow-2xl">
-            <h2 class="text-xl font-bold mb-4">새 프로젝트 생성</h2>
-            <input type="text" id="new-proj-title" class="w-full border p-3 rounded-lg mb-4 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="프로젝트 제목">
-            <input type="text" id="new-proj-manager" class="w-full border p-3 rounded-lg mb-6 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="PM (담당자)">
-            <div class="flex justify-end gap-2">
-                <button onclick="window.closeModal('modal-project-create')" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition">취소</button>
-                <button onclick="window.submitNewProject()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow transition">생성</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 알림창 (Alert 대체용 커스텀 모달) -->
-    <div id="modal-alert" class="hidden modal-overlay" style="z-index: 99999;">
+    <!-- Modals -->
+    <!-- Alert Modal -->
+    <div id="modal-alert" class="hidden modal-overlay z-[99999]">
         <div class="bg-white rounded-xl p-6 max-w-sm w-full m-4 shadow-2xl text-center transform scale-100 transition-transform">
-            <p id="alert-message" class="text-gray-800 font-bold mb-6 text-lg"></p>
-            <button onclick="window.closeAlert()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-bold transition">확인</button>
+            <p id="alert-message" class="text-gray-800 font-bold mb-6 text-sm"></p>
+            <button onclick="window.closeAlert()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold">확인</button>
         </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="modal-report" class="hidden modal-overlay z-[9999]">
+        <div class="bg-white rounded-xl p-8 max-w-2xl w-full m-4 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h2 id="report-title" class="text-xl font-black text-indigo-900"><i class="fa-solid fa-chart-line mr-2"></i>보고서</h2>
+                <button onclick="window.closeModal('modal-report')" class="text-gray-400 hover:text-red-500 text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="report-content" class="flex-1 overflow-y-auto prose prose-sm max-w-none p-4 bg-gray-50 border rounded-lg text-gray-700 whitespace-pre-wrap font-sans leading-relaxed"></div>
+            <div class="mt-4 flex justify-end">
+                <button onclick="window.copyReport()" class="bg-gray-800 hover:bg-black text-white px-5 py-2 rounded-lg font-bold shadow transition"><i class="fa-solid fa-copy mr-1"></i> 클립보드 복사</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create WS Modal -->
+    <div id="modal-ws-create" class="hidden modal-overlay z-[1000]">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full m-4 shadow-2xl"><h2 class="text-lg font-bold mb-4">새 워크스페이스 생성</h2><input type="text" id="new-ws-name" class="w-full border p-2 rounded mb-4 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="예: 개발팀, 신사업TF"><div class="flex justify-end gap-2"><button onclick="window.closeModal('modal-ws-create')" class="px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded">취소</button><button onclick="window.submitNewWorkspace()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded font-bold">생성</button></div></div>
+    </div>
+    
+    <!-- Members Modal -->
+    <div id="modal-ws-members" class="hidden modal-overlay z-[1000]">
+        <div class="bg-white rounded-xl p-6 max-w-md w-full m-4 shadow-2xl flex flex-col max-h-[80vh]"><h2 class="text-lg font-bold mb-4"><i class="fa-solid fa-users text-indigo-500 mr-2"></i>팀원 초대 및 관리</h2><div class="flex gap-2 mb-4"><input type="email" id="new-member-email" class="flex-1 border p-2 rounded outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="구글 이메일"><button onclick="window.addWorkspaceMember()" class="bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded font-bold">초대</button></div><div class="flex-1 overflow-y-auto border rounded bg-gray-50"><ul id="members-list" class="divide-y divide-gray-200"></ul></div><button onclick="window.closeModal('modal-ws-members')" class="mt-4 bg-gray-200 hover:bg-gray-300 py-2 rounded font-bold">닫기</button></div>
+    </div>
+
+    <!-- Create Proj Modal -->
+    <div id="modal-project-create" class="hidden modal-overlay z-[1000]">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full m-4 shadow-2xl"><h2 class="text-lg font-bold mb-4">새 프로젝트 생성</h2><input type="text" id="new-proj-title" class="w-full border p-2 rounded mb-3 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="프로젝트명"><input type="text" id="new-proj-manager" class="w-full border p-2 rounded mb-4 outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50" placeholder="PM (담당자)"><div class="flex justify-end gap-2"><button onclick="window.closeModal('modal-project-create')" class="px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded">취소</button><button onclick="window.submitNewProject()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded font-bold">생성</button></div></div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, arrayUnion, arrayRemove, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 🔥 파이어베이스 설정
-        const firebaseConfig = {
-            apiKey: "AIzaSyC_A9S3QcfSykB5jyJP3UyhPLgrEJKnhoY",
-            authDomain: "g-project-c4e2f.firebaseapp.com",
-            projectId: "g-project-c4e2f",
-            storageBucket: "g-project-c4e2f.firebasestorage.app",
-            messagingSenderId: "479032795497",
-            appId: "1:479032795497:web:bf9e91498e5aadc3111df8",
-            measurementId: "G-RB915DZRKB"
-        };
-        
+        const firebaseConfig = { apiKey: "AIzaSyC_A9S3QcfSykB5jyJP3UyhPLgrEJKnhoY", authDomain: "g-project-c4e2f.firebaseapp.com", projectId: "g-project-c4e2f", storageBucket: "g-project-c4e2f.firebasestorage.app", messagingSenderId: "479032795497", appId: "1:479032795497:web:bf9e91498e5aadc3111df8" };
         const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
-        
-        // 고정 앱 ID
+        const auth = getAuth(app); const db = getFirestore(app); const provider = new GoogleAuthProvider();
         const GLOBAL_APP_ID = 'gantt-google-auth-v1';
 
-        // 전역 상태 변수 (명시적 선언 및 초기화 보장)
-        window.APP_STATE = {
-            currentUser: null,
-            myWorkspaces: [],
-            currentWsId: null,
-            currentWsMeta: null,
-            wsProjects: [],
-            currentProjId: null, // 에러의 주원인이었던 변수를 전역 객체로 관리
-            tasks: [],
-            unsubWs: null,
-            unsubProj: null,
-            unsubTask: null
+        // 상태 관리
+        window.APP_STATE = { 
+            user: null, wsList: [], curWs: null, curWsMeta: null, projList: [], curProjId: null, 
+            rawTasks: [], tasksTree: [], selectedTasks: new Set(), lastCheckedIdx: null, unsubs: {} 
         };
 
-        // UI 유틸리티
-        const loader = document.getElementById('loading-overlay');
-        const showLoader = (text = "데이터를 불러오는 중입니다...") => { 
-            document.getElementById('loading-text').innerText = text; 
-            loader.classList.remove('hidden'); 
-        };
-        const hideLoader = () => loader.classList.add('hidden');
-        
-        const showView = (viewId) => { 
-            ['view-login', 'view-workspaces', 'view-dashboard', 'view-project'].forEach(id => document.getElementById(id).classList.add('hidden')); 
-            document.getElementById(viewId).classList.remove('hidden'); 
-        };
-        
+        // UI Helpers
+        const L = (text="로딩중") => { document.getElementById('loading-text').innerText=text; document.getElementById('loading-overlay').classList.remove('hidden'); };
+        const H = () => document.getElementById('loading-overlay').classList.add('hidden');
+        window.showAlert = (msg) => { document.getElementById('alert-message').innerText = msg; document.getElementById('modal-alert').classList.remove('hidden'); };
+        window.closeAlert = () => document.getElementById('modal-alert').classList.add('hidden');
         window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-        
-        // 커스텀 알림창 (브라우저 기본 alert 대신 사용)
-        window.showAlert = (msg) => {
-            document.getElementById('alert-message').innerText = msg;
-            document.getElementById('modal-alert').classList.remove('hidden');
-        };
-        window.closeAlert = () => document.getElementById('modal-alert').classList.add('hidden');
+        const showView = (id) => { ['view-login','view-workspaces','view-dashboard','view-project'].forEach(v=>document.getElementById(v).classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); };
 
-        // 인증 로직
-        window.loginWithGoogle = async () => {
-            try { 
-                showLoader("로그인 중입니다...");
-                await signInWithPopup(auth, provider); 
-            } catch (e) { 
-                hideLoader();
-                if (e.code === 'auth/unauthorized-domain') {
-                    const hostname = window.location.hostname || window.location.host || "도메인을 확인할 수 없습니다.";
-                    document.getElementById('current-domain-text').innerText = hostname;
-                    window.openModal('modal-error');
-                } else { 
-                    window.showAlert("로그인 에러: " + e.message); 
-                }
-            }
-        };
-
-        window.copyDomain = () => {
-            const domainText = document.getElementById('current-domain-text').innerText;
-            const tempInput = document.createElement("textarea");
-            tempInput.value = domainText;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            document.execCommand("copy");
-            document.body.removeChild(tempInput);
-            window.showAlert("주소가 복사되었습니다!\n파이어베이스 '승인된 도메인'에 추가하세요.");
-        };
-
+        // Auth
+        window.loginWithGoogle = async () => { try { L(); await signInWithPopup(auth, provider); } catch(e) { H(); window.showAlert(e.message); } };
         window.logout = () => signOut(auth);
-
-        onAuthStateChanged(auth, (user) => {
-            window.APP_STATE.currentUser = user;
-            if (user) {
-                document.getElementById('btn-google-login').classList.add('hidden');
-                document.getElementById('user-profile').classList.remove('hidden');
-                document.getElementById('user-name').innerText = user.displayName || 'User';
-                document.getElementById('user-email').innerText = user.email || user.uid;
-                document.getElementById('user-photo').src = user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName||'U'}&background=random`;
-                loadWorkspaces();
+        onAuthStateChanged(auth, (u) => {
+            window.APP_STATE.user = u;
+            if(u) {
+                document.getElementById('btn-google-login').classList.add('hidden'); document.getElementById('user-profile').classList.remove('hidden');
+                document.getElementById('user-name').innerText = u.displayName||'User'; document.getElementById('user-photo').src = u.photoURL||'';
+                loadWS();
             } else {
-                document.getElementById('btn-google-login').classList.remove('hidden');
-                document.getElementById('user-profile').classList.add('hidden');
-                hideLoader();
-                showView('view-login');
-                // 모든 리스너 해제
-                if(window.APP_STATE.unsubWs) window.APP_STATE.unsubWs();
-                if(window.APP_STATE.unsubProj) window.APP_STATE.unsubProj();
-                if(window.APP_STATE.unsubTask) window.APP_STATE.unsubTask();
+                document.getElementById('btn-google-login').classList.remove('hidden'); document.getElementById('user-profile').classList.add('hidden');
+                H(); showView('view-login'); Object.values(window.APP_STATE.unsubs).forEach(fn=>fn&&fn());
             }
         });
 
-        // 1. 워크스페이스 로직
-        function loadWorkspaces() {
-            const user = window.APP_STATE.currentUser;
-            if(!user) return;
-            if(window.APP_STATE.unsubWs) window.APP_STATE.unsubWs();
-            
-            showLoader("워크스페이스 동기화 중...");
-            const wsRef = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces');
-            
-            window.APP_STATE.unsubWs = onSnapshot(wsRef, (snap) => {
-                try {
-                    const allWs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    const identifier = user.email || user.uid;
-                    
-                    window.APP_STATE.myWorkspaces = allWs.filter(w => 
-                        w.ownerEmail === identifier || (w.allowedEmails && w.allowedEmails.includes(identifier))
-                    );
-                    window.APP_STATE.myWorkspaces.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
-                    
-                    renderWorkspaces();
-                    hideLoader();
-                    if (document.getElementById('view-login').offsetParent) showView('view-workspaces');
-                } catch(err) {
-                    console.error("WS Parse Error:", err);
-                    hideLoader();
-                }
-            }, (error) => {
-                console.error("WS Snapshot Error:", error);
-                hideLoader();
-                window.showAlert("데이터 접근 권한이 없습니다. 파이어베이스 보안 규칙을 확인해주세요.");
+        // Date Utils
+        const toISODate = (date) => { const d = new Date(date); return isNaN(d) ? null : d.toISOString().split('T')[0]; };
+        const addDays = (dateStr, days) => { const d = new Date(dateStr); d.setDate(d.getDate() + parseInt(days)); return toISODate(d); };
+        const diffDays = (d1, d2) => Math.round((new Date(d2) - new Date(d1))/(1000*60*60*24));
+
+        // ================= WS 로직 =================
+        function loadWS() {
+            if(window.APP_STATE.unsubs.ws) window.APP_STATE.unsubs.ws();
+            const ref = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces');
+            window.APP_STATE.unsubs.ws = onSnapshot(ref, (snap) => {
+                const mail = window.APP_STATE.user.email;
+                window.APP_STATE.wsList = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(w=>w.ownerEmail===mail || (w.allowedEmails||[]).includes(mail)).sort((a,b)=>b.createdAt-a.createdAt);
+                renderWS(); H(); if(document.getElementById('view-login').offsetParent) showView('view-workspaces');
+            }, e=>window.showAlert("워크스페이스 로드 에러"));
+        }
+        function renderWS() {
+            const grid = document.getElementById('workspaces-grid'); grid.innerHTML = '';
+            if(window.APP_STATE.wsList.length === 0) { grid.innerHTML = '<div class="col-span-full py-16 text-center text-gray-400 border border-dashed rounded-xl">속한 워크스페이스가 없습니다.</div>'; return; }
+            window.APP_STATE.wsList.forEach(ws => {
+                const isO = ws.ownerEmail === window.APP_STATE.user.email;
+                grid.innerHTML += `<div class="bg-white p-6 rounded-2xl shadow-sm border hover:-translate-y-1 transition cursor-pointer flex flex-col group h-40" onclick="window.enterWS('${ws.id}')">
+                    <div class="flex justify-between items-start mb-4"><div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><i class="fa-solid fa-building"></i></div>
+                    <div class="flex items-center gap-1"><span class="text-[10px] bg-${isO?'indigo':'gray'}-50 text-${isO?'indigo':'gray'}-700 px-2 py-0.5 rounded border">${isO?'Owner':'Member'}</span>
+                    ${isO ? `<button onclick="event.stopPropagation(); window.deleteWorkspace('${ws.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"><i class="fa-solid fa-trash-can"></i></button>` : ''}</div></div>
+                    <h3 class="text-xl font-bold truncate">${ws.name}</h3>
+                    <div class="mt-auto text-xs text-gray-500">멤버 ${(ws.allowedEmails?.length||0)+1}명</div></div>`;
             });
         }
-
-        function renderWorkspaces() {
-            const grid = document.getElementById('workspaces-grid');
-            grid.innerHTML = '';
-            const wList = window.APP_STATE.myWorkspaces;
-            
-            if (wList.length === 0) {
-                grid.innerHTML = '<div class="col-span-full py-16 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300 shadow-sm"><i class="fa-solid fa-folder-open text-4xl mb-3 opacity-50"></i><br>소속된 워크스페이스가 없습니다.<br>새 워크스페이스를 만들거나 초대받으세요.</div>';
-                return;
-            }
-            
-            wList.forEach(ws => {
-                const card = document.createElement('div');
-                const isOwner = ws.ownerEmail === (window.APP_STATE.currentUser.email || window.APP_STATE.currentUser.uid);
-                card.className = "bg-white p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 hover-lift cursor-pointer flex flex-col group relative overflow-hidden h-40";
-                
-                // 이벤트 리스너 분리 장착 (클릭 오류 완벽 방지)
-                card.addEventListener('click', (e) => {
-                    if(!e.target.closest('button')) window.enterWorkspace(ws.id);
-                });
-
-                card.innerHTML = `
-                    <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div class="flex justify-between items-start mb-4 pointer-events-none">
-                        <div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl shadow-sm"><i class="fa-solid fa-building"></i></div>
-                        <div class="flex items-center gap-2 pointer-events-auto">
-                            <span class="bg-${isOwner?'indigo':'gray'}-50 text-${isOwner?'indigo':'gray'}-700 px-2 py-0.5 rounded text-[10px] font-bold border border-${isOwner?'indigo':'gray'}-200">${isOwner?'Owner':'Member'}</span>
-                            ${isOwner ? `<button onclick="event.stopPropagation(); window.deleteWorkspace('${ws.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition z-10 relative p-1"><i class="fa-solid fa-trash-can"></i></button>` : ''}
-                        </div>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-800 truncate pointer-events-none">${ws.name}</h3>
-                    <div class="mt-auto text-xs text-gray-500 flex justify-between items-center pointer-events-none">
-                        <span>멤버 ${(ws.allowedEmails?.length || 0) + 1}명</span>
-                        <i class="fa-solid fa-arrow-right text-gray-300 group-hover:text-indigo-500 transition"></i>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        window.submitNewWorkspace = async () => {
-            const user = window.APP_STATE.currentUser;
-            if (!user) return window.showAlert("로그인이 필요합니다.");
-
-            const name = document.getElementById('new-ws-name').value.trim();
-            if(!name) return;
-            
-            showLoader("생성 중...");
-            try {
-                const wsRef = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces');
-                await addDoc(wsRef, {
-                    name,
-                    ownerEmail: user.email || user.uid,
-                    allowedEmails: [],
-                    createdAt: Date.now()
-                });
-                document.getElementById('new-ws-name').value = '';
-                window.closeModal('modal-ws-create');
-            } catch (err) {
-                window.showAlert("워크스페이스 생성 실패: " + err.message);
-            } finally {
-                hideLoader();
-            }
-        };
-
-        window.deleteWorkspace = async (id) => {
-            if(confirm("이 워크스페이스를 완전히 삭제하시겠습니까? (복구 불가)")) {
-                try {
-                    await deleteDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces', id));
-                } catch (err) {
-                    window.showAlert("삭제 실패: " + err.message);
-                }
-            }
-        };
-
-        window.enterWorkspace = (wsId) => {
-            if (!window.APP_STATE.currentUser) return;
-            window.APP_STATE.currentWsId = wsId;
-            const meta = window.APP_STATE.myWorkspaces.find(w => w.id === wsId);
-            window.APP_STATE.currentWsMeta = meta;
-            
-            document.getElementById('current-ws-name').innerText = meta.name;
-            const isOwner = meta.ownerEmail === (window.APP_STATE.currentUser.email || window.APP_STATE.currentUser.uid);
-            document.getElementById('current-ws-role').innerText = isOwner ? '관리자' : '멤버';
-            document.getElementById('btn-manage-members').classList.toggle('hidden', !isOwner);
-            
-            showView('view-dashboard');
-            loadProjects();
-        };
-
+        window.submitNewWorkspace = async () => { const name = document.getElementById('new-ws-name').value; if(name) { L(); await addDoc(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces'), {name, ownerEmail:window.APP_STATE.user.email, allowedEmails:[], createdAt:Date.now()}); document.getElementById('new-ws-name').value=''; window.closeModal('modal-ws-create'); H(); } };
+        window.deleteWorkspace = async (id) => { if(confirm("삭제하시겠습니까?")) await deleteDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces', id)); };
+        window.enterWS = (id) => { window.APP_STATE.curWs = id; window.APP_STATE.curWsMeta = window.APP_STATE.wsList.find(w=>w.id===id); document.getElementById('current-ws-name').innerText=window.APP_STATE.curWsMeta.name; document.getElementById('btn-manage-members').classList.toggle('hidden', window.APP_STATE.curWsMeta.ownerEmail !== window.APP_STATE.user.email); showView('view-dashboard'); loadProj(); };
         window.goHome = () => showView('view-workspaces');
 
-        // 2. 프로젝트 로직
-        function loadProjects() {
-            if (window.APP_STATE.unsubProj) window.APP_STATE.unsubProj();
-            showLoader("프로젝트 동기화 중...");
-            
-            const wsId = window.APP_STATE.currentWsId;
-            const projRef = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_projects`);
-            
-            window.APP_STATE.unsubProj = onSnapshot(projRef, (snap) => {
-                try {
-                    window.APP_STATE.wsProjects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    window.APP_STATE.wsProjects.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
-                    renderProjects();
-                } catch(err) {
-                    console.error("Proj Parse Error:", err);
-                } finally {
-                    hideLoader();
-                }
-            }, (error) => {
-                console.error("Proj Snapshot Error:", error);
-                hideLoader();
-                window.showAlert("프로젝트 목록을 불러오지 못했습니다. 파이어베이스 보안 규칙(matches)을 확인하세요.");
-            });
+        // ================= 대시보드 (프로젝트) 로직 =================
+        function loadProj() {
+            if(window.APP_STATE.unsubs.proj) window.APP_STATE.unsubs.proj();
+            L("프로젝트 동기화...");
+            window.APP_STATE.unsubs.proj = onSnapshot(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_projects`), snap => {
+                window.APP_STATE.projList = snap.docs.map(d=>({id:d.id, ...d.data()})); window.renderProjects(); H();
+            }, e=> { H(); window.showAlert("프로젝트 로드 에러"); });
         }
+        window.renderProjects = () => {
+            const grid = document.getElementById('projects-grid'); grid.innerHTML = '';
+            const showHidden = document.getElementById('toggle-hidden-projects').checked;
+            
+            // 정렬: 즐겨찾기 최우선, 그 다음 최신순
+            let list = [...window.APP_STATE.projList].sort((a,b) => {
+                if(a.favorite && !b.favorite) return -1; if(!a.favorite && b.favorite) return 1;
+                return (b.createdAt || 0) - (a.createdAt || 0);
+            });
+            if(!showHidden) list = list.filter(p => !p.hidden);
 
-        function renderProjects() {
-            const grid = document.getElementById('projects-grid');
-            grid.innerHTML = '';
-            const pList = window.APP_STATE.wsProjects;
+            if(list.length===0) { grid.innerHTML = '<div class="col-span-full py-16 text-center text-gray-400 border border-dashed rounded-xl">프로젝트가 없습니다.</div>'; return; }
             
-            if (pList.length === 0) {
-                grid.innerHTML = '<div class="col-span-full py-16 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm"><i class="fa-solid fa-list-check text-4xl mb-3 opacity-50"></i><br>프로젝트가 없습니다. 새 프로젝트를 생성해보세요.</div>';
-                return;
-            }
-            
-            pList.forEach(proj => {
-                const card = document.createElement('div');
-                card.className = "bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover-lift cursor-pointer flex flex-col group relative overflow-hidden";
+            list.forEach(proj => {
                 const prog = proj.progress || 0;
+                const favCls = proj.favorite ? 'text-amber-400 opacity-100' : 'text-gray-300 opacity-0 group-hover:opacity-100';
+                const eyeCls = proj.hidden ? 'fa-eye-slash text-gray-400' : 'fa-eye text-gray-300 hover:text-gray-600';
                 
-                card.addEventListener('click', (e) => {
-                    if(!e.target.closest('button')) window.openProject(proj.id);
-                });
-
-                card.innerHTML = `
-                    <div class="absolute top-0 left-0 w-full h-1 bg-${prog === 100 ? 'emerald' : 'indigo'}-500 z-10 pointer-events-none"></div>
-                    <div class="flex justify-between items-center mb-3 z-10 relative pointer-events-none">
-                        <span class="text-[10px] font-bold uppercase ${prog === 100 ? 'text-emerald-500 bg-emerald-50' : 'text-gray-500 bg-gray-100'} px-2 py-0.5 rounded">${prog===100?'완료':'진행중'}</span>
-                        <button onclick="event.stopPropagation(); window.deleteProject('${proj.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition z-20 relative bg-white rounded shadow-sm p-1.5 pointer-events-auto"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                grid.innerHTML += `<div class="bg-white p-5 rounded-2xl border shadow-sm hover-lift cursor-pointer flex flex-col group relative ${proj.hidden?'bg-gray-50 opacity-75':''}" onclick="window.openProject('${proj.id}')">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-${prog===100?'emerald':'indigo'}-500"></div>
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-[10px] font-bold uppercase ${prog===100?'text-emerald-500 bg-emerald-50':'text-gray-500 bg-gray-100'} px-2 py-0.5 rounded">${prog===100?'완료':'진행중'}</span>
+                        <div class="flex gap-1">
+                            <button onclick="event.stopPropagation(); window.toggleProjMeta('${proj.id}','favorite')" class="${favCls} transition p-1 text-sm"><i class="fa-solid fa-star"></i></button>
+                            <button onclick="event.stopPropagation(); window.duplicateProject('${proj.id}')" class="text-gray-300 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition p-1" title="복제"><i class="fa-solid fa-copy"></i></button>
+                            <button onclick="event.stopPropagation(); window.toggleProjMeta('${proj.id}','hidden')" class="opacity-0 group-hover:opacity-100 transition p-1"><i class="fa-solid ${eyeCls}"></i></button>
+                            <button onclick="event.stopPropagation(); window.deleteProject('${proj.id}')" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
                     </div>
-                    <h3 class="font-bold text-gray-800 text-lg truncate mb-1 z-10 relative pointer-events-none">${proj.title}</h3>
-                    <p class="text-[11px] text-gray-500 mb-4 flex items-center gap-1 z-10 relative pointer-events-none"><i class="fa-solid fa-user-circle"></i> ${proj.manager || '미지정'}</p>
-                    <div class="mt-auto z-10 relative pointer-events-none">
-                        <div class="flex justify-between text-[10px] font-bold mb-1.5"><span class="text-gray-400">${proj.start || '-'} ~ ${proj.end || '-'}</span><span class="text-${prog===100?'emerald':'indigo'}-600">${prog}%</span></div>
-                        <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-${prog===100?'emerald':'indigo'}-500 h-full transition-all" style="width: ${prog}%"></div></div>
+                    <h3 class="font-bold text-gray-800 text-lg truncate mb-1">${proj.title}</h3>
+                    <p class="text-[11px] text-gray-500 mb-4"><i class="fa-solid fa-user-circle"></i> ${proj.manager||'미지정'}</p>
+                    <div class="mt-auto">
+                        <div class="flex justify-between text-[10px] font-bold mb-1"><span class="text-gray-400">${proj.start||'-'} ~ ${proj.end||'-'}</span><span class="text-${prog===100?'emerald':'indigo'}-600">${prog}%</span></div>
+                        <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden"><div class="bg-${prog===100?'emerald':'indigo'}-500 h-full" style="width:${prog}%"></div></div>
                     </div>
-                `;
-                grid.appendChild(card);
+                </div>`;
             });
-        }
-
+        };
         window.submitNewProject = async () => {
-            const title = document.getElementById('new-proj-title').value.trim();
-            const manager = document.getElementById('new-proj-manager').value.trim();
-            if(!title) return;
-            
-            showLoader("생성 중...");
-            try {
-                const wsId = window.APP_STATE.currentWsId;
-                const projRef = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_projects`);
-                await addDoc(projRef, { title, manager, progress: 0, createdAt: Date.now() });
-                
-                document.getElementById('new-proj-title').value = '';
-                document.getElementById('new-proj-manager').value = '';
-                window.closeModal('modal-project-create');
-            } catch (err) {
-                window.showAlert("프로젝트 생성 오류: " + err.message);
-            } finally {
-                hideLoader();
-            }
+            const title = document.getElementById('new-proj-title').value; const manager = document.getElementById('new-proj-manager').value;
+            if(!title) return; L(); await addDoc(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_projects`), {title, manager, progress:0, createdAt:Date.now()});
+            window.closeModal('modal-project-create'); H();
         };
-
-        window.deleteProject = async (id) => {
-            if(confirm("프로젝트를 삭제하시겠습니까?")) {
-                try {
-                    const wsId = window.APP_STATE.currentWsId;
-                    await deleteDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_projects`, id));
-                } catch (err) {
-                    window.showAlert("삭제 오류: " + err.message);
-                }
-            }
-        };
-
-        // 3. 간트/태스크 로직
-        window.openProject = (pId) => {
-            try {
-                if (!pId) throw new Error("유효하지 않은 프로젝트 ID입니다.");
-                
-                // 상태 객체에 안전하게 저장 (이 부분이 에러의 핵심 해결책)
-                window.APP_STATE.currentProjId = pId;
-                
-                const meta = window.APP_STATE.wsProjects.find(p => p.id === pId);
-                if (!meta) throw new Error("프로젝트 메타정보를 찾을 수 없습니다.");
-                
-                document.getElementById('project-title-display').innerText = meta.title;
-                showView('view-project'); 
-                
-                if (window.APP_STATE.unsubTask) window.APP_STATE.unsubTask();
-                showLoader("작업 데이터 동기화 중...");
-                
-                const wsId = window.APP_STATE.currentWsId;
-                // 안전하게 저장된 변수들을 바탕으로 경로 설정
-                const tasksRef = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_tasks_${pId}`);
-                
-                window.APP_STATE.unsubTask = onSnapshot(tasksRef, (snap) => {
-                    try {
-                        window.APP_STATE.tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        window.APP_STATE.tasks.sort((a,b) => String(a.wbs||'').localeCompare(String(b.wbs||''), undefined, {numeric: true}));
-                        updateProjectMeta();
-                        renderGantt();
-                    } catch (err) {
-                        console.error("Task Parse/Render Error:", err);
-                        window.showAlert("차트를 그리는 중 오류가 발생했습니다.");
-                    } finally {
-                        hideLoader();
-                    }
-                }, (error) => {
-                    console.error("Task Snapshot Error:", error);
-                    hideLoader();
-                    window.showAlert("작업 데이터를 불러올 권한이 없습니다. 보안 규칙을 확인하세요.");
-                });
-            } catch (err) {
-                console.error("Open Project Error:", err);
-                hideLoader();
-                window.showAlert(err.message);
-            }
-        };
-
-        window.backToDashboard = () => {
-            if (window.APP_STATE.unsubTask) window.APP_STATE.unsubTask();
-            showView('view-dashboard');
-        };
+        window.deleteProject = async (id) => { if(confirm("삭제하시겠습니까?")) await deleteDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_projects`, id)); };
+        window.toggleProjMeta = async (id, field) => { const p = window.APP_STATE.projList.find(x=>x.id===id); await updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_projects`, id), {[field]: !p[field]}); };
         
-        function updateProjectMeta() {
+        // 프로젝트 복제
+        window.duplicateProject = async (id) => {
+            if(!confirm("이 프로젝트와 내부 작업을 모두 복제하시겠습니까?")) return;
+            L("프로젝트 복제 중...");
             try {
-                const tList = window.APP_STATE.tasks;
-                const pId = window.APP_STATE.currentProjId;
-                const wsId = window.APP_STATE.currentWsId;
+                const orig = window.APP_STATE.projList.find(p=>p.id===id);
+                const newProjRef = await addDoc(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_projects`), {...orig, title: orig.title + ' (복사본)', createdAt: Date.now()});
                 
-                let totalP = 0, minD = null, maxD = null;
-                tList.forEach(t => {
-                    totalP += (parseInt(t.progress) || 0);
-                    if(t.start && t.end) { 
-                        const s = new Date(t.start), e = new Date(t.end); 
-                        if(!minD || s < minD) minD = s; 
-                        if(!maxD || e > maxD) maxD = e; 
+                // 태스크 복사
+                const tasksSnap = await getDocs(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${id}`));
+                const batch = writeBatch(db);
+                tasksSnap.forEach(docSnap => {
+                    const tRef = doc(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${newProjRef.id}`));
+                    batch.set(tRef, docSnap.data());
+                });
+                await batch.commit();
+            } catch(e) { window.showAlert("복제 오류: "+e.message); } finally { H(); }
+        };
+
+        // 멤버 모달 관리
+        window.openMembersModal = () => {
+            const list = document.getElementById('members-list'); const meta = window.APP_STATE.curWsMeta;
+            list.innerHTML = `<li class="p-3 flex justify-between bg-indigo-50 font-bold text-sm text-indigo-900 border-b"><span><i class="fa-solid fa-crown text-amber-500 mr-2"></i>${meta.ownerEmail}</span><span class="text-[10px] bg-indigo-200 px-2 rounded">Owner</span></li>`;
+            (meta.allowedEmails||[]).forEach(e => { list.innerHTML += `<li class="p-2 flex justify-between text-sm"><span>${e}</span><button onclick="window.removeMember('${e}')" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-xmark"></i></button></li>`; });
+            window.openModal('modal-ws-members');
+        };
+        window.addWorkspaceMember = async () => { const e = document.getElementById('new-member-email').value.trim().toLowerCase(); if(e && e!==window.APP_STATE.curWsMeta.ownerEmail) { await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data','workspaces',window.APP_STATE.curWs), {allowedEmails: arrayUnion(e)}); document.getElementById('new-member-email').value=''; window.openMembersModal(); } };
+        window.removeMember = async (e) => { if(confirm("제외?")) { await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data','workspaces',window.APP_STATE.curWs), {allowedEmails: arrayRemove(e)}); window.openMembersModal(); } };
+
+        // ================= 간트 / 태스크 로직 (Ultimate 복구본) =================
+        window.openProject = (id) => {
+            window.APP_STATE.curProjId = id; const meta = window.APP_STATE.projList.find(p=>p.id===id);
+            document.getElementById('project-title-display').innerText = meta.title; showView('view-project');
+            if(window.APP_STATE.unsubs.task) window.APP_STATE.unsubs.task();
+            L("작업 로드 중...");
+            window.APP_STATE.selectedTasks.clear();
+            
+            window.APP_STATE.unsubs.task = onSnapshot(collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${id}`), snap => {
+                window.APP_STATE.rawTasks = snap.docs.map(d=>({id:d.id, ...d.data()}));
+                // WBS 기반 정렬
+                window.APP_STATE.rawTasks.sort((a,b) => {
+                    const pa = (a.wbs||'').split('.').map(Number); const pb = (b.wbs||'').split('.').map(Number);
+                    for(let i=0; i<Math.max(pa.length, pb.length); i++) { if(pa[i]!==pb[i]) return (pa[i]||0) - (pb[i]||0); } return 0;
+                });
+                buildTreeAndRollup(); renderGanttUI(); H();
+            }, e=> { H(); window.showAlert("작업 로드 실패"); });
+        };
+        window.backToDashboard = () => { if(window.APP_STATE.unsubs.task) window.APP_STATE.unsubs.task(); showView('view-dashboard'); };
+
+        // WBS 파싱 로직 및 Roll-up 계산
+        const getDepth = (wbs) => (wbs||'1').split('.').length - 1;
+        const isParentOf = (parentWbs, childWbs) => childWbs.startsWith(parentWbs + '.');
+        
+        // 접기/펼치기 상태 저장 객체
+        window.collapsedWBS = window.collapsedWBS || new Set();
+        window.toggleCollapse = (wbs) => { if(window.collapsedWBS.has(wbs)) window.collapsedWBS.delete(wbs); else window.collapsedWBS.add(wbs); renderGanttUI(); };
+
+        function buildTreeAndRollup() {
+            const raw = window.APP_STATE.rawTasks;
+            let needsUpdate = false;
+            
+            // 상향식 롤업 계산 (가장 깊은 레벨부터)
+            const maxDepth = Math.max(...raw.map(t=>getDepth(t.wbs)), 0);
+            for(let d = maxDepth; d >= 0; d--) {
+                const parents = raw.filter(t => getDepth(t.wbs) === d);
+                parents.forEach(p => {
+                    const children = raw.filter(c => getDepth(c.wbs) === d+1 && isParentOf(p.wbs, c.wbs));
+                    p.isParent = children.length > 0;
+                    if(p.isParent) {
+                        let totalP = 0, minS = null, maxE = null;
+                        children.forEach(c => {
+                            totalP += (parseInt(c.progress)||0);
+                            if(c.start) { const s = new Date(c.start); if(!minS || s < minS) minS = s; }
+                            if(c.end) { const e = new Date(c.end); if(!maxE || e > maxE) maxE = e; }
+                        });
+                        const avgP = Math.round(totalP / children.length);
+                        const sStr = minS ? toISODate(minS) : p.start; const eStr = maxE ? toISODate(maxE) : p.end;
+                        const dur = (sStr && eStr) ? diffDays(sStr, eStr)+1 : 1;
+                        
+                        if(p.progress !== avgP || p.start !== sStr || p.end !== eStr || p.duration !== dur) {
+                            p.progress = avgP; p.start = sStr; p.end = eStr; p.duration = dur;
+                            // Firestore 업데이트 큐
+                            updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, p.id), { progress: avgP, start: sStr, end: eStr, duration: dur });
+                            needsUpdate = true;
+                        }
+                    } else if(!p.end && p.start && p.duration) {
+                        p.end = addDays(p.start, p.duration-1);
                     }
                 });
-                
-                const avgP = tList.length > 0 ? Math.round(totalP / tList.length) : 0;
-                const sStr = minD ? minD.toISOString().split('T')[0] : null; 
-                const eStr = maxD ? maxD.toISOString().split('T')[0] : null;
-                const pMeta = window.APP_STATE.wsProjects.find(p => p.id === pId);
-                
-                if(pMeta && (avgP !== (pMeta.progress||0) || sStr !== (pMeta.start||null) || eStr !== (pMeta.end||null))) {
-                    const docRef = doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_projects`, pId);
-                    updateDoc(docRef, { progress: avgP, start: sStr, end: eStr }).catch(e=>console.error(e));
-                }
-            } catch(e) {
-                console.error("updateProjectMeta error:", e);
+            }
+            
+            // 프로젝트 통계 업데이트
+            let pTotal = 0, pMinS = null, pMaxE = null, topLevelCount = 0;
+            raw.filter(t=>getDepth(t.wbs)===0).forEach(t => {
+                topLevelCount++; pTotal += (parseInt(t.progress)||0);
+                if(t.start) { const s = new Date(t.start); if(!pMinS || s < pMinS) pMinS = s; }
+                if(t.end) { const e = new Date(t.end); if(!pMaxE || e > pMaxE) pMaxE = e; }
+            });
+            const pAvg = topLevelCount>0 ? Math.round(pTotal/topLevelCount) : 0;
+            const pSStr = pMinS ? toISODate(pMinS) : null; const pEStr = pMaxE ? toISODate(pMaxE) : null;
+            
+            const meta = window.APP_STATE.projList.find(p=>p.id===window.APP_STATE.curProjId);
+            if(meta && (meta.progress !== pAvg || meta.start !== pSStr || meta.end !== pEStr)) {
+                updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_projects`,window.APP_STATE.curProjId), {progress:pAvg, start:pSStr, end:pEStr});
             }
         }
 
-        function renderGantt() {
-            const list = document.getElementById('task-list');
-            const hdr = document.getElementById('gantt-header'); 
-            const bdy = document.getElementById('gantt-body');
-            const emptyState = document.getElementById('gantt-empty-state');
-            const tList = window.APP_STATE.tasks;
+        // ================= UI 렌더링 =================
+        function renderGanttUI() {
+            const list = document.getElementById('task-list'); list.innerHTML = '';
+            const hdr = document.getElementById('gantt-header'); hdr.innerHTML = '';
+            const bdy = document.getElementById('gantt-body'); bdy.querySelectorAll('.gantt-bar, .dependency-line').forEach(e=>e.remove());
+            const empty = document.getElementById('gantt-empty-state');
             
-            list.innerHTML = '';
-            hdr.innerHTML = ''; 
-            bdy.querySelectorAll('.gantt-bar, .today-line').forEach(b => b.remove());
+            const raw = window.APP_STATE.rawTasks;
+            if(raw.length===0) { empty.classList.remove('hidden'); return; }
+            empty.classList.add('hidden');
 
-            if(tList.length === 0) {
-                emptyState.classList.remove('hidden');
-                return;
-            } else {
-                emptyState.classList.add('hidden');
+            // 옵션 생성용 HTML (선행 작업)
+            const getPredOpts = (currId, predId) => {
+                let opts = `<option value="">없음</option>`;
+                raw.forEach(t => { if(t.id !== currId) opts += `<option value="${t.id}" ${predId===t.id?'selected':''}>${t.wbs}. ${t.name}</option>`; });
+                return opts;
+            };
+
+            // 필터링 (접힌 부모의 자식 숨기기)
+            let visibleTasks = [];
+            for(let i=0; i<raw.length; i++) {
+                const t = raw[i]; let isHidden = false;
+                window.collapsedWBS.forEach(cwbs => { if(isParentOf(cwbs, t.wbs)) isHidden = true; });
+                if(!isHidden) visibleTasks.push(t);
             }
 
-            tList.forEach(t => {
-                const tr = document.createElement('tr'); 
-                tr.className = "hover:bg-indigo-50/50 transition group border-b border-gray-100";
+            // 테이블 렌더링 (Drag & Drop)
+            visibleTasks.forEach((t, idx) => {
+                const depth = getDepth(t.wbs);
+                const isChecked = window.APP_STATE.selectedTasks.has(t.id);
+                const isCollapsed = window.collapsedWBS.has(t.wbs);
+                
+                const tr = document.createElement('tr');
+                tr.className = `hover:bg-indigo-50/50 border-b border-gray-100 transition-colors draggable-row bg-white`;
+                tr.draggable = true;
+                tr.dataset.id = t.id;
+                tr.dataset.idx = idx;
+                
+                // 테이블 드래그 앤 드롭 이벤트
+                tr.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', t.id); tr.classList.add('dragging'); });
+                tr.addEventListener('dragend', () => { tr.classList.remove('dragging'); document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el=>el.classList.remove('drag-over-top', 'drag-over-bottom')); });
+                tr.addEventListener('dragover', (e) => {
+                    e.preventDefault(); const rect = tr.getBoundingClientRect(); const mid = rect.top + rect.height/2;
+                    tr.classList.remove('drag-over-top', 'drag-over-bottom');
+                    if(e.clientY < mid) tr.classList.add('drag-over-top'); else tr.classList.add('drag-over-bottom');
+                });
+                tr.addEventListener('dragleave', () => { tr.classList.remove('drag-over-top', 'drag-over-bottom'); });
+                tr.addEventListener('drop', (e) => {
+                    e.preventDefault(); tr.classList.remove('drag-over-top', 'drag-over-bottom');
+                    const dragId = e.dataTransfer.getData('text/plain'); if(dragId === t.id) return;
+                    const rect = tr.getBoundingClientRect(); const dropAfter = e.clientY > rect.top + rect.height/2;
+                    window.reorderTasks(dragId, t.id, dropAfter);
+                });
+
                 tr.innerHTML = `
-                    <td class="px-2 py-2 text-center font-bold text-indigo-400 text-[11px]">${t.wbs || '-'}</td>
-                    <td class="px-2 py-2"><div style="padding-left: ${((t.wbs||"").split('.').length-1)*1}rem"><input type="text" value="${t.name||''}" onchange="window.updateTask('${t.id}', 'name', this.value)" class="w-full bg-transparent outline-none border border-transparent hover:border-gray-200 focus:bg-white rounded px-1 text-xs"></div></td>
-                    <td class="px-2 py-2 text-center flex items-center justify-center"><input type="number" value="${t.progress||0}" onchange="window.updateTask('${t.id}', 'progress', this.value)" class="w-10 text-center font-bold text-xs bg-transparent border border-transparent hover:border-gray-200 focus:bg-white rounded outline-none text-${t.progress===100?'emerald':'indigo'}-600"><span class="text-[9px] text-gray-400 ml-0.5">%</span></td>
-                    <td class="px-2 py-2 text-center"><button onclick="window.deleteTask('${t.id}')" class="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"><i class="fa-solid fa-trash-can text-xs"></i></button></td>
+                    <td class="p-2 text-center"><input type="checkbox" value="${t.id}" ${isChecked?'checked':''} onclick="window.toggleTaskSelect(event, '${t.id}', ${idx})" class="cursor-pointer"></td>
+                    <td class="p-2 text-center font-bold text-indigo-400 text-xs">${t.wbs||'-'}</td>
+                    <td class="p-2">
+                        <div class="flex items-center" style="padding-left:${depth*1.2}rem">
+                            ${t.isParent ? `<button onclick="window.toggleCollapse('${t.wbs}')" class="w-4 text-gray-400 hover:text-indigo-600 outline-none mr-1"><i class="fa-solid ${isCollapsed?'fa-caret-right':'fa-caret-down'}"></i></button>` : `<span class="w-5 inline-block"></span>`}
+                            <input type="text" value="${t.name||''}" onchange="window.updateTask('${t.id}', 'name', this.value)" class="w-full bg-transparent outline-none border border-transparent hover:border-gray-200 focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 text-xs truncate-cell ${t.isParent?'font-bold':''}">
+                        </div>
+                    </td>
+                    <td class="p-2"><input type="text" value="${t.manager||''}" onchange="window.updateTask('${t.id}', 'manager', this.value)" class="w-full bg-transparent outline-none border border-transparent hover:border-gray-200 focus:bg-white rounded px-1 text-center text-xs truncate-cell"></td>
+                    <td class="p-2"><input type="date" value="${t.start||''}" ${t.isParent?'disabled':''} onchange="window.updateTaskDate('${t.id}', 'start', this.value)" class="w-full bg-transparent outline-none border border-transparent hover:border-gray-200 focus:bg-white rounded text-[10px] ${t.isParent?'text-gray-400':''}"></td>
+                    <td class="p-2"><input type="number" value="${t.duration||1}" ${t.isParent?'disabled':''} min="1" onchange="window.updateTaskDate('${t.id}', 'duration', this.value)" class="w-full text-center bg-transparent border border-transparent hover:border-gray-200 focus:bg-white rounded text-xs ${t.isParent?'text-gray-400':''}"></td>
+                    <td class="p-2 text-center text-[10px] text-gray-500">${t.end||'-'}</td>
+                    <td class="p-2 flex items-center"><input type="number" value="${t.progress||0}" ${t.isParent?'disabled':''} onchange="window.updateTask('${t.id}', 'progress', this.value)" class="w-10 text-center font-bold text-xs bg-transparent border border-transparent hover:border-gray-200 focus:bg-white rounded text-${t.progress===100?'emerald':'indigo'}-600 ${t.isParent?'opacity-70':''}"><span class="text-[9px] text-gray-400 ml-0.5">%</span></td>
+                    <td class="p-2"><select onchange="window.updateTask('${t.id}', 'predecessor', this.value)" class="w-full bg-transparent border border-transparent hover:border-gray-200 rounded text-[10px] truncate-cell outline-none">${getPredOpts(t.id, t.predecessor)}</select></td>
+                    <td class="p-2 text-center"><button onclick="window.deleteTask('${t.id}')" class="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1 hover:bg-red-50 rounded"><i class="fa-solid fa-trash-can text-xs"></i></button></td>
                 `;
                 list.appendChild(tr);
             });
+
+            // Gantt Header (기간 계산)
+            let minD = new Date(); let maxD = new Date();
+            raw.forEach(t => { 
+                if(t.start) { const d = new Date(t.start); if(d < minD) minD = d; }
+                if(t.end) { const d = new Date(t.end); if(d > maxD) maxD = d; }
+            });
+            minD.setDate(minD.getDate() - 3); maxD.setDate(maxD.getDate() + 10);
+            const totalDays = Math.max(40, diffDays(minD, maxD));
             
-            // Gantt Bar Rendering
-            let minD = new Date(); 
-            tList.forEach(t => { if(t.start) { const d = new Date(t.start); if(d < minD) minD = d; } });
-            minD.setDate(minD.getDate() - 2);
-            
-            for(let i=0; i<40; i++) {
+            for(let i=0; i<totalDays; i++) {
                 const d = new Date(minD); d.setDate(d.getDate() + i);
                 const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                const el = document.createElement('div'); el.style.width = "40px"; el.className = `flex-shrink-0 text-center text-[9px] border-r border-gray-200 h-full flex flex-col items-center justify-center ${isWeekend ? 'bg-red-50/30' : 'bg-transparent'}`;
-                el.innerHTML = `<span class="font-bold ${isWeekend?'text-red-400':'text-gray-600'}">${d.getDate()}</span><span class="scale-75 opacity-40">${d.getMonth()+1}월</span>`;
-                hdr.appendChild(el);
+                hdr.innerHTML += `<div class="flex-shrink-0 text-center text-[9px] border-r border-gray-200 h-full flex flex-col items-center justify-center ${isWeekend?'bg-red-50/30':''}" style="width:40px;"><span class="font-bold ${isWeekend?'text-red-400':'text-gray-600'}">${d.getDate()}</span><span class="scale-75 opacity-40">${d.getMonth()+1}월</span></div>`;
             }
             
-            tList.forEach((t, i) => {
+            // Gantt Body (막대 그리기 및 마우스 이벤트)
+            visibleTasks.forEach((t, i) => {
                 if(!t.start) return;
-                const offset = Math.ceil((new Date(t.start) - minD) / 86400000);
-                const dur = t.end ? Math.ceil((new Date(t.end) - new Date(t.start)) / 86400000) + 1 : 1;
-                const bar = document.createElement('div'); bar.className = `gantt-bar bg-${t.progress === 100 ? 'emerald' : 'indigo'}-500`;
-                bar.style.left = `${offset * 40}px`; bar.style.top = `${(i * 36) + 8}px`; bar.style.height = `20px`; bar.style.width = `${Math.max(dur, 1) * 40}px`;
-                bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress||0}%"></div><span class="gantt-label text-[9px] truncate px-1">${t.name}</span>`;
+                const offset = diffDays(minD, t.start);
+                const dur = Math.max(t.duration || 1, 1);
+                const bar = document.createElement('div'); 
+                bar.className = `gantt-bar ${t.isParent?'is-parent':''} bg-${t.progress===100?'emerald':'indigo'}-${t.isParent?'600':'400'}`;
+                bar.style.left = `${offset * 40}px`; bar.style.top = `${(i * 39) + 8}px`; // row height approx 39px
+                bar.style.width = `${dur * 40}px`;
+                bar.id = `bar-${t.id}`;
+                
+                // 드래그 앤 드롭 이벤트 등록 (부모는 이동/크기조절 불가)
+                if(!t.isParent) {
+                    bar.onmousedown = (e) => window.startGanttDrag(e, t.id, 'move');
+                    bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress||0}%"></div><span class="gantt-label">${t.name}</span><div class="resize-handle" onmousedown="event.stopPropagation(); window.startGanttDrag(event, '${t.id}', 'resize')"></div>`;
+                } else {
+                    bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress||0}%"></div><span class="gantt-label opacity-70" style="top:-14px; left:0; color:#4f46e5;">${t.name}</span>`;
+                }
                 bdy.appendChild(bar);
             });
         }
 
-        window.addNewTask = async () => {
-            const wsId = window.APP_STATE.currentWsId;
-            const pId = window.APP_STATE.currentProjId;
-            if(!wsId || !pId) return;
-
-            let nextWBS = 1; 
-            window.APP_STATE.tasks.forEach(t => { 
-                if(t.wbs) { 
-                    const v = parseInt(String(t.wbs).split('.')[0]); 
-                    if(v >= nextWBS) nextWBS = v + 1; 
-                } 
-            });
+        // ================= Gantt 마우스 드래그 (이동 & 리사이즈) =================
+        let dragInfo = null;
+        window.startGanttDrag = (e, taskId, mode) => {
+            if(e.button !== 0) return; // 좌클릭만
+            e.preventDefault();
+            const bar = document.getElementById(`bar-${taskId}`);
+            const task = window.APP_STATE.rawTasks.find(t=>t.id===taskId);
+            const scrollArea = document.getElementById('gantt-scroll-area');
             
-            try {
-                const ref = collection(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_tasks_${pId}`);
-                await addDoc(ref, { wbs: nextWBS.toString(), name: '새 작업', progress: 0, start: new Date().toISOString().split('T')[0], end: new Date(Date.now()+86400000).toISOString().split('T')[0] });
-            } catch (err) {
-                window.showAlert("작업 추가 오류: " + err.message);
-            }
+            dragInfo = {
+                taskId, mode, bar, task,
+                startX: e.clientX,
+                origLeft: parseFloat(bar.style.left),
+                origWidth: parseFloat(bar.style.width),
+                scrollLeft: scrollArea.scrollLeft
+            };
+            document.body.style.cursor = mode==='resize' ? 'ew-resize' : 'grabbing';
+            document.addEventListener('mousemove', onGanttDrag);
+            document.addEventListener('mouseup', onGanttDrop);
         };
 
-        window.updateTask = async (id, field, val) => {
-            try {
-                const wsId = window.APP_STATE.currentWsId;
-                const pId = window.APP_STATE.currentProjId;
-                const data = { [field]: field === 'progress' ? Math.min(100, Math.max(0, parseInt(val) || 0)) : val };
-                await updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_tasks_${pId}`, id), data);
-            } catch (err) {
-                console.error("Update Error:", err);
-            }
-        };
+        function onGanttDrag(e) {
+            if(!dragInfo) return;
+            const deltaX = e.clientX - dragInfo.startX;
+            const scrollDelta = document.getElementById('gantt-scroll-area').scrollLeft - dragInfo.scrollLeft;
+            const totalDelta = deltaX + scrollDelta;
 
-        window.deleteTask = async (id) => { 
-            if(confirm("작업을 삭제하시겠습니까?")) {
-                try {
-                    const wsId = window.APP_STATE.currentWsId;
-                    const pId = window.APP_STATE.currentProjId;
-                    await deleteDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${wsId}_tasks_${pId}`, id));
-                } catch(err) {
-                    window.showAlert("작업 삭제 오류: " + err.message);
-                }
+            if(dragInfo.mode === 'move') {
+                let newLeft = Math.max(0, dragInfo.origLeft + totalDelta);
+                // 40px 단위 스냅 (1일)
+                newLeft = Math.round(newLeft / 40) * 40;
+                dragInfo.bar.style.left = `${newLeft}px`;
+            } else if(dragInfo.mode === 'resize') {
+                let newWidth = Math.max(40, dragInfo.origWidth + totalDelta);
+                newWidth = Math.round(newWidth / 40) * 40;
+                dragInfo.bar.style.width = `${newWidth}px`;
             }
-        };
+        }
 
-        // 멤버 관리 로직
-        window.openMembersModal = () => {
-            const list = document.getElementById('members-list');
-            const ownerInfo = window.APP_STATE.currentWsMeta.ownerEmail || '관리자';
-            list.innerHTML = `<li class="py-3 px-3 flex justify-between items-center text-sm font-bold text-indigo-900 border-b bg-indigo-50/50 rounded-t-lg"><span><i class="fa-solid fa-crown text-amber-500 mr-2"></i>${ownerInfo}</span><span class="text-[10px] bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded">Owner</span></li>`;
+        async function onGanttDrop(e) {
+            document.removeEventListener('mousemove', onGanttDrag);
+            document.removeEventListener('mouseup', onGanttDrop);
+            document.body.style.cursor = '';
+            if(!dragInfo) return;
+
+            const finalLeft = parseFloat(dragInfo.bar.style.left);
+            const finalWidth = parseFloat(dragInfo.bar.style.width);
             
-            const allowed = window.APP_STATE.currentWsMeta.allowedEmails || [];
-            if(allowed.length === 0) {
-                list.innerHTML += `<li class="py-4 text-center text-xs text-gray-400">초대된 팀원이 없습니다.</li>`;
-            } else {
-                allowed.forEach(email => {
-                    list.innerHTML += `<li class="py-2.5 px-3 flex justify-between items-center text-sm text-gray-700 hover:bg-white transition"><span><i class="fa-solid fa-user text-gray-300 mr-2"></i>${email}</span><button onclick="window.removeMember('${email}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition"><i class="fa-solid fa-xmark"></i></button></li>`;
+            const diffDaysLeft = Math.round((finalLeft - dragInfo.origLeft) / 40);
+            const newDuration = Math.round(finalWidth / 40);
+
+            if(diffDaysLeft !== 0 || newDuration !== parseInt(dragInfo.task.duration)) {
+                let newStart = dragInfo.task.start;
+                if(diffDaysLeft !== 0) newStart = addDays(newStart, diffDaysLeft);
+                const newEnd = addDays(newStart, newDuration - 1);
+                
+                await updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, dragInfo.taskId), {
+                    start: newStart, end: newEnd, duration: newDuration
                 });
             }
-            window.openModal('modal-ws-members');
+            dragInfo = null;
+        }
+
+
+        // ================= WBS 및 테이블 데이터 로직 =================
+        window.addNewTask = async () => {
+            const raw = window.APP_STATE.rawTasks;
+            let maxWbs = 0; raw.forEach(t=>{ const v=parseInt((t.wbs||'0').split('.')[0]); if(v>maxWbs) maxWbs=v; });
+            const s = new Date(); const e = new Date(); e.setDate(e.getDate()+2);
+            await addDoc(collection(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`), {wbs:(maxWbs+1).toString(), name:'새 작업', duration:3, start:toISODate(s), end:toISODate(e), progress:0});
+        };
+        window.updateTask = async (id, field, val) => {
+            let v = val; if(field==='progress') v = Math.min(100, Math.max(0, parseInt(val)||0));
+            await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, id), {[field]:v});
+        };
+        window.updateTaskDate = async (id, field, val) => {
+            const t = window.APP_STATE.rawTasks.find(x=>x.id===id);
+            let update = {};
+            if(field==='start') { update.start = val; update.end = addDays(val, (t.duration||1)-1); }
+            if(field==='duration') { const d = Math.max(1, parseInt(val)||1); update.duration = d; update.end = addDays(t.start, d-1); }
+            await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, id), update);
+        };
+        window.deleteTask = async (id) => { if(confirm("삭제?")) await deleteDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, id)); };
+
+        // 테이블 드래그 앤 드롭 (순서 재배치 및 WBS 재계산)
+        window.reorderTasks = async (dragId, targetId, dropAfter) => {
+            const raw = [...window.APP_STATE.rawTasks];
+            const dragIdx = raw.findIndex(t=>t.id===dragId); const targetIdx = raw.findIndex(t=>t.id===targetId);
+            if(dragIdx<0 || targetIdx<0) return;
+            
+            const [dragItem] = raw.splice(dragIdx, 1);
+            const newTargetIdx = raw.findIndex(t=>t.id===targetId); // splice 후 인덱스 재계산
+            raw.splice(dropAfter ? newTargetIdx+1 : newTargetIdx, 0, dragItem);
+            
+            // 단순 1단계 WBS로 싹 초기화 
+            const batch = writeBatch(db);
+            raw.forEach((t, i) => {
+                const ref = doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, t.id);
+                batch.update(ref, { wbs: (i+1).toString() });
+            });
+            await batch.commit();
         };
 
-        window.addWorkspaceMember = async () => {
-            const emailIn = document.getElementById('new-member-email');
-            const email = emailIn.value.trim().toLowerCase();
-            const meta = window.APP_STATE.currentWsMeta;
-            if(!email || email === meta.ownerEmail) return;
-            try {
-                await updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces', window.APP_STATE.currentWsId), { allowedEmails: arrayUnion(email) });
-                emailIn.value = '';
-                if(!meta.allowedEmails.includes(email)) meta.allowedEmails.push(email);
-                window.openMembersModal();
-            } catch(e) { window.showAlert("초대 실패: " + e.message); }
+        // 다중 선택 (Shift 지원) 및 들여쓰기/내어쓰기
+        window.toggleAllTasks = (chk) => {
+            window.APP_STATE.selectedTasks.clear();
+            if(chk.checked) window.APP_STATE.rawTasks.forEach(t=>window.APP_STATE.selectedTasks.add(t.id));
+            renderGanttUI();
         };
-
-        window.removeMember = async (email) => {
-            if(confirm(`${email} 님을 제외하시겠습니까?`)) {
-                try {
-                    await updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', 'workspaces', window.APP_STATE.currentWsId), { allowedEmails: arrayRemove(email) });
-                    window.APP_STATE.currentWsMeta.allowedEmails = window.APP_STATE.currentWsMeta.allowedEmails.filter(e => e !== email);
-                    window.openMembersModal();
-                } catch(e) { window.showAlert("제외 실패: " + e.message); }
+        window.toggleTaskSelect = (e, id, idx) => {
+            const set = window.APP_STATE.selectedTasks;
+            if(e.shiftKey && window.APP_STATE.lastCheckedIdx !== null) {
+                const start = Math.min(window.APP_STATE.lastCheckedIdx, idx); const end = Math.max(window.APP_STATE.lastCheckedIdx, idx);
+                for(let i=start; i<=end; i++) { if(e.target.checked) set.add(window.APP_STATE.rawTasks[i].id); else set.delete(window.APP_STATE.rawTasks[i].id); }
+            } else {
+                if(e.target.checked) set.add(id); else set.delete(id);
             }
+            window.APP_STATE.lastCheckedIdx = idx;
+            document.getElementById('check-all').checked = set.size === window.APP_STATE.rawTasks.length && set.size > 0;
         };
 
-        // UI 리사이저 및 스크롤 동기화
+        window.indentSelected = async () => {
+            if(window.APP_STATE.selectedTasks.size === 0) return window.showAlert("선택된 작업이 없습니다.");
+            const raw = window.APP_STATE.rawTasks; const batch = writeBatch(db);
+            let updated = false;
+            raw.forEach((t, i) => {
+                if(window.APP_STATE.selectedTasks.has(t.id) && i > 0) {
+                    const prev = raw[i-1];
+                    const prevDepth = getDepth(prev.wbs); const curDepth = getDepth(t.wbs);
+                    if(curDepth <= prevDepth) { // 들여쓰기 가능
+                        let base = prev.wbs;
+                        if(curDepth < prevDepth) { const parts = prev.wbs.split('.'); base = parts.slice(0, curDepth+1).join('.'); }
+                        // 하위 번호 부여
+                        const siblings = raw.filter(x=>isParentOf(base, x.wbs) && getDepth(x.wbs)===getDepth(base)+1);
+                        const newWbs = `${base}.${siblings.length+1}`;
+                        batch.update(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`,t.id), {wbs:newWbs});
+                        t.wbs = newWbs; // 로컬 선반영 (연속 적용용)
+                        updated = true;
+                    }
+                }
+            });
+            if(updated) await batch.commit(); window.APP_STATE.selectedTasks.clear();
+        };
+
+        window.outdentSelected = async () => {
+            if(window.APP_STATE.selectedTasks.size === 0) return window.showAlert("선택된 작업이 없습니다.");
+            const raw = window.APP_STATE.rawTasks; const batch = writeBatch(db); let updated = false;
+            raw.forEach((t, i) => {
+                if(window.APP_STATE.selectedTasks.has(t.id)) {
+                    if(getDepth(t.wbs) > 0) {
+                        const parts = t.wbs.split('.'); parts.pop();
+                        const newBase = parts.join('.');
+                        // 기존 상위의 형제로 만듦
+                        let maxSibling = 0; raw.forEach(x=>{ if(isParentOf(newBase.split('.').slice(0,-1).join('.')||'0', x.wbs) && getDepth(x.wbs)===getDepth(newBase)) { const v=parseInt(x.wbs.split('.').pop()); if(v>maxSibling) maxSibling=v; }});
+                        const newWbs = getDepth(newBase)===0 ? (maxSibling+1).toString() : `${newBase.split('.').slice(0,-1).join('.')}.${maxSibling+1}`;
+                        batch.update(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`,t.id), {wbs:newWbs});
+                        t.wbs = newWbs; updated = true;
+                    }
+                }
+            });
+            if(updated) await batch.commit(); window.APP_STATE.selectedTasks.clear();
+        };
+
+
+        // ================= 보고서 생성 로직 =================
+        window.generateDashboardReport = () => {
+            const list = window.APP_STATE.projList;
+            if(list.length===0) return window.showAlert("프로젝트가 없습니다.");
+            const avgProg = Math.round(list.reduce((sum, p)=>sum+(p.progress||0),0)/list.length);
+            const comp = list.filter(p=>p.progress===100).length;
+            let md = `🏢 **[${window.APP_STATE.curWsMeta.name}] 워크스페이스 요약 보고서**\n`;
+            md += `* 생성일시: ${new Date().toLocaleString()}\n* 총 프로젝트: ${list.length}개 (완료 ${comp}개)\n* 전체 평균 진행률: ${avgProg}%\n\n---\n`;
+            list.forEach(p => { md += `\n📌 **${p.title}**\n- 상태: ${p.progress===100?'완료':'진행중'} (${p.progress}%)\n- 담당자: ${p.manager||'미지정'}\n- 기간: ${p.start||'-'} ~ ${p.end||'-'}\n`; });
+            document.getElementById('report-content').innerText = md; window.openModal('modal-report');
+        };
+
+        window.generateProjectReport = () => {
+            const pMeta = window.APP_STATE.projList.find(p=>p.id===window.APP_STATE.curProjId);
+            const tList = window.APP_STATE.rawTasks;
+            let md = `📊 **[${pMeta.title}] 상세 보고서**\n`;
+            md += `* 총괄: ${pMeta.manager||'미지정'}\n* 전체 진행률: ${pMeta.progress||0}%\n* 전체 기간: ${pMeta.start||'-'} ~ ${pMeta.end||'-'}\n\n**[WBS 상세내역]**\n`;
+            tList.forEach(t => { const ind = "  ".repeat(getDepth(t.wbs)); md += `${ind}${t.wbs}. ${t.name} [${t.progress||0}%] (${t.manager||'미지정'}) : ${t.start||'-'} ~ ${t.end||'-'}\n`; });
+            document.getElementById('report-content').innerText = md; window.openModal('modal-report');
+        };
+
+        window.copyReport = () => {
+            const txt = document.getElementById('report-content').innerText;
+            const t = document.createElement("textarea"); t.value = txt; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t);
+            window.showAlert("보고서가 클립보드에 복사되었습니다.");
+        };
+
+        // Scroll sync
+        window.syncScroll = () => { document.getElementById('gantt-header-container').scrollLeft = document.getElementById('gantt-scroll-area').scrollLeft; };
+        
+        // Resizer
         let isResizing = false;
         document.getElementById('resizer')?.addEventListener('mousedown', () => { isResizing = true; document.body.style.userSelect = 'none'; });
-        document.addEventListener('mousemove', (e) => { if(isResizing) { const lp = document.getElementById('left-panel'); if(lp) lp.style.width = `${Math.min(window.innerWidth-300, Math.max(300, e.clientX))}px`; } });
+        document.addEventListener('mousemove', (e) => { if(isResizing) { const lp = document.getElementById('left-panel'); if(lp) lp.style.width = `${Math.min(window.innerWidth-400, Math.max(300, e.clientX))}px`; } });
         document.addEventListener('mouseup', () => { if(isResizing) { isResizing = false; document.body.style.userSelect = 'auto'; } });
-        document.getElementById('gantt-scroll-area')?.addEventListener('scroll', function() { document.getElementById('gantt-header-container').scrollLeft = this.scrollLeft; });
 
     </script>
 </body>
