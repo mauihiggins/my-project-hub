@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.2.3</title>
+    <title>프로젝트 매니저 - v4.2.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -75,7 +75,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.2.3</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.2.4</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -353,7 +353,7 @@
                 const mail = window.APP_STATE.user.email;
                 window.APP_STATE.wsList = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(w=>w.ownerEmail===mail || (w.allowedEmails||[]).includes(mail)).sort((a,b)=>b.createdAt-a.createdAt);
                 renderWS(); H(); 
-                if(!window.APP_STATE.curWs && document.getElementById('view-login').offsetParent) showView('view-workspaces');
+                if(!window.APP_STATE.curWs) showView('view-workspaces');
             }, e=>window.showAlert("워크스페이스 로드 에러"));
         }
         function renderWS() {
