@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.3.1</title>
+    <title>프로젝트 매니저 - v4.4.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -37,6 +37,10 @@
         
         .resize-handle { position: absolute; right: 0; top: 0; width: 8px; height: 100%; cursor: ew-resize; background: transparent; }
         .is-parent .resize-handle { display: none; }
+
+        /* Gantt Link Drag Handle */
+        .link-handle { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background-color: #f59e0b; border: 2px solid white; cursor: crosshair; display: none; z-index: 30; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .gantt-bar:hover .link-handle { display: block; }
 
         /* Table Styles (Enterprise look) */
         table { border-collapse: collapse; }
@@ -75,7 +79,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.3.1</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.4.0</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -752,7 +756,7 @@
         function renderGanttUI() {
             const list = document.getElementById('task-list'); list.innerHTML = '';
             const hdr = document.getElementById('gantt-header'); hdr.innerHTML = '';
-            const bdy = document.getElementById('gantt-body'); bdy.querySelectorAll('.gantt-bar, .dependency-line, .today-line').forEach(e=>e.remove());
+            const bdy = document.getElementById('gantt-body'); bdy.querySelectorAll('.gantt-bar, .dependency-line, .today-line, .temp-link-line').forEach(e=>e.remove());
             const empty = document.getElementById('gantt-empty-state');
             
             const svg = document.getElementById('gantt-lines');
@@ -763,11 +767,6 @@
             empty.classList.add('hidden');
 
             const filterVal = document.getElementById('task-filter-select').value;
-            const getPredOpts = (currId, predId) => {
-                let opts = `<option value="">없음</option>`;
-                window.APP_STATE.rawTasks.forEach(t => { if(t.id !== currId) opts += `<option value="${t.id}" ${predId===t.id?'selected':''}>${t.wbs}. ${t.name}</option>`; });
-                return opts;
-            };
 
             let visibleTasks = [];
             for(let i=0; i<raw.length; i++) {
@@ -805,7 +804,10 @@
                     window.reorderTasks(dragId, t.id, dropAfter);
                 });
 
-                // 종료일(col-end)을 input date 로 변경
+                // 현재 선행 작업의 WBS 번호 찾기
+                const predTaskObj = t.predecessor ? window.APP_STATE.rawTasks.find(x => x.id === t.predecessor) : null;
+                const predWbsStr = predTaskObj ? predTaskObj.wbs : '';
+
                 tr.innerHTML = `
                     <td class="p-0 text-center border-r border-gray-300 bg-gray-50 cursor-pointer col-checkbox" onclick="window.toggleTaskSelect(event, '${t.id}', ${idx})">
                         <input type="checkbox" value="${t.id}" ${isChecked?'checked':''} class="pointer-events-none accent-blue-600 scale-90">
@@ -821,7 +823,9 @@
                     <td class="p-0 border-r border-gray-300 col-start"><input type="date" value="${t.start||''}" ${t.isParent?'disabled':''} onchange="window.updateTaskDate('${t.id}', 'start', this.value)" class="cell-input text-center"></td>
                     <td class="p-0 border-r border-gray-300 col-end"><input type="date" value="${t.end||''}" ${t.isParent?'disabled':''} onchange="window.updateTaskDate('${t.id}', 'end', this.value)" class="cell-input text-center"></td>
                     <td class="p-0 border-r border-gray-300 relative col-progress"><input type="number" value="${t.progress||0}" ${t.isParent?'disabled':''} onchange="window.updateTask('${t.id}', 'progress', this.value)" class="cell-input text-center font-semibold text-${t.progress===100?'emerald':'blue'}-600 pr-3"><span class="absolute right-2 top-1.5 text-gray-400 pointer-events-none text-[10px]">%</span></td>
-                    <td class="p-0 border-r border-gray-300 col-predecessor"><select onchange="window.updateTask('${t.id}', 'predecessor', this.value)" class="cell-input text-gray-600 cursor-pointer">${getPredOpts(t.id, t.predecessor)}</select></td>
+                    <td class="p-0 border-r border-gray-300 col-predecessor">
+                        <input type="text" value="${predWbsStr}" onchange="window.updatePredecessorByWBS('${t.id}', this.value)" class="cell-input text-center text-gray-600 font-mono" placeholder="WBS 번호">
+                    </td>
                     <td class="p-0 border-r border-gray-300 col-manager"><input type="text" value="${t.manager||''}" onchange="window.updateTask('${t.id}', 'manager', this.value)" class="cell-input text-center text-gray-600"></td>
                     <td class="p-0 border-r border-gray-300 col-priority">
                         <select onchange="window.updateTask('${t.id}', 'priority', this.value)" class="cell-input text-gray-600 cursor-pointer text-center">
@@ -896,7 +900,10 @@
 
                 if(!t.isParent) {
                     bar.onmousedown = (e) => window.startGanttDrag(e, t.id, 'move');
-                    bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress||0}%"></div><span class="gantt-label">${t.name}</span><div class="resize-handle" onmousedown="event.stopPropagation(); window.startGanttDrag(event, '${t.id}', 'resize')"></div>`;
+                    // 새롭게 추가된 link-handle (연결선 드래그 핸들)
+                    bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress||0}%"></div><span class="gantt-label">${t.name}</span>
+                                     <div class="resize-handle" onmousedown="event.stopPropagation(); window.startGanttDrag(event, '${t.id}', 'resize')"></div>
+                                     <div class="link-handle" onmousedown="event.stopPropagation(); window.startLinkDrag(event, '${t.id}')" title="드래그하여 선행 작업 연결"></div>`;
                 } else {
                     bar.innerHTML = `<div class="gantt-progress" style="width: ${t.progress||0}%"></div><span class="gantt-label" style="top:-14px; left:0;">${t.name}</span>`;
                 }
@@ -921,10 +928,10 @@
             });
         }
 
-        // 마우스 드래그
+        // ================= 간트 마우스 드래그 (이동 및 리사이즈) =================
         let dragInfo = null;
         window.startGanttDrag = (e, taskId, mode) => {
-            if(e.button !== 0) return; e.preventDefault();
+            if(e.button !== 0) return; e.preventDefault(); e.stopPropagation();
             const bar = document.getElementById(`bar-${taskId}`); const task = window.APP_STATE.rawTasks.find(t=>t.id===taskId);
             dragInfo = { taskId, mode, bar, task, startX: e.clientX, origLeft: parseFloat(bar.style.left), origWidth: parseFloat(bar.style.width), scrollLeft: document.getElementById('gantt-scroll-area').scrollLeft };
             document.body.style.cursor = mode==='resize' ? 'ew-resize' : 'grabbing';
@@ -951,6 +958,87 @@
             dragInfo = null;
         }
 
+        // ================= 간트 마우스 드래그 (의존성 연결선 Link Drag) =================
+        let linkDragInfo = null;
+        window.startLinkDrag = (e, taskId) => {
+            if(e.button !== 0) return; 
+            e.preventDefault(); e.stopPropagation();
+            
+            const svg = document.getElementById('gantt-lines');
+            const scrollArea = document.getElementById('gantt-scroll-area');
+            const rect = svg.getBoundingClientRect();
+            
+            const startX = e.clientX - rect.left + scrollArea.scrollLeft;
+            const startY = e.clientY - rect.top;
+
+            const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            tempLine.setAttribute('stroke', '#f59e0b');
+            tempLine.setAttribute('stroke-width', '2');
+            tempLine.setAttribute('stroke-dasharray', '4');
+            tempLine.setAttribute('fill', 'none');
+            tempLine.setAttribute('class', 'temp-link-line pointer-events-none');
+            svg.appendChild(tempLine);
+
+            linkDragInfo = { taskId, startX, startY, tempLine, svgRect: rect, scrollArea };
+            
+            document.body.style.cursor = 'crosshair';
+            document.addEventListener('mousemove', onLinkDrag);
+            document.addEventListener('mouseup', onLinkDrop);
+        };
+
+        function onLinkDrag(e) {
+            if(!linkDragInfo) return;
+            const curX = e.clientX - linkDragInfo.svgRect.left + linkDragInfo.scrollArea.scrollLeft;
+            const curY = e.clientY - linkDragInfo.svgRect.top;
+            
+            // 베지어 곡선으로 그리기
+            const d = `M ${linkDragInfo.startX} ${linkDragInfo.startY} C ${linkDragInfo.startX + 50} ${linkDragInfo.startY}, ${curX - 50} ${curY}, ${curX} ${curY}`;
+            linkDragInfo.tempLine.setAttribute('d', d);
+        }
+
+        async function onLinkDrop(e) {
+            document.removeEventListener('mousemove', onLinkDrag);
+            document.removeEventListener('mouseup', onLinkDrop);
+            document.body.style.cursor = '';
+            
+            if(!linkDragInfo) return;
+            linkDragInfo.tempLine.remove();
+            
+            // 마우스를 놓은 위치의 요소 찾기
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const targetBar = el ? el.closest('.gantt-bar') : null;
+
+            if (targetBar) {
+                const targetId = targetBar.id.replace('bar-', '');
+                if (targetId && targetId !== linkDragInfo.taskId) {
+                    const targetTask = window.APP_STATE.rawTasks.find(x => x.id === targetId);
+                    const predTask = window.APP_STATE.rawTasks.find(x => x.id === linkDragInfo.taskId);
+                    
+                    if (targetTask && !targetTask.isParent && predTask) {
+                        let newStart = targetTask.start;
+                        let newEnd = targetTask.end;
+                        
+                        if (predTask.end) {
+                            newStart = addDays(predTask.end, 1);
+                            newEnd = addDays(newStart, (targetTask.duration || 1) - 1);
+                        }
+                        
+                        L();
+                        await updateDoc(doc(db, 'artifacts', GLOBAL_APP_ID, 'public', 'data', `ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, targetId), {
+                            predecessor: predTask.id,
+                            start: newStart,
+                            end: newEnd
+                        });
+                        await window.cascadeDates(targetId, newEnd);
+                        H();
+                    } else if (targetTask && targetTask.isParent) {
+                        window.showAlert("상위(요약) 작업은 선행 작업의 영향을 직접 받을 수 없습니다.");
+                    }
+                }
+            }
+            linkDragInfo = null;
+        }
+
         // ================= 데이터 편집 =================
         window.addNewTask = async () => {
             const raw = window.APP_STATE.rawTasks; let maxWbs = 0; raw.forEach(t=>{ const v=parseInt((t.wbs||'0').split('.')[0]); if(v>maxWbs) maxWbs=v; });
@@ -958,23 +1046,52 @@
                 wbs:(maxWbs+1).toString(), name:'새 작업', duration:1, start:toISODate(new Date()), end:toISODate(new Date()), progress:0, priority: 'normal', notes: '', link: ''
             });
         };
+        
         window.updateTask = async (id, field, val) => {
             let v = val; if(field==='progress') v = Math.min(100, Math.max(0, parseInt(val)||0));
             let updateData = { [field]: v };
+            await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, id), updateData);
+        };
 
-            if (field === 'predecessor' && v) {
-                const predTask = window.APP_STATE.rawTasks.find(x => x.id === v);
-                const currTask = window.APP_STATE.rawTasks.find(x => x.id === id);
-                if (predTask && predTask.end) {
-                    updateData.start = addDays(predTask.end, 1);
-                    updateData.end = addDays(updateData.start, (currTask.duration || 1) - 1);
+        // WBS 텍스트 직접 입력으로 선행 작업 연동하기
+        window.updatePredecessorByWBS = async (taskId, wbsStr) => {
+            const val = wbsStr.trim();
+            let predId = null;
+            let newStart = null;
+            let newEnd = null;
+
+            const currTask = window.APP_STATE.rawTasks.find(x => x.id === taskId);
+            
+            if (val) {
+                const predTask = window.APP_STATE.rawTasks.find(x => x.wbs === val);
+                if (!predTask) {
+                    window.showAlert("해당 WBS 번호를 찾을 수 없습니다.");
+                    renderGanttUI(); // 잘못된 입력시 원상복구
+                    return;
                 }
-            } else if (field === 'predecessor' && !v) {
-                updateData.predecessor = null;
+                if (predTask.id === taskId) {
+                    window.showAlert("자기 자신을 선행 작업으로 지정할 수 없습니다.");
+                    renderGanttUI();
+                    return;
+                }
+
+                predId = predTask.id;
+                if (predTask.end) {
+                    newStart = addDays(predTask.end, 1);
+                    newEnd = addDays(newStart, (currTask.duration || 1) - 1);
+                }
             }
 
-            await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, id), updateData);
-            if (updateData.end) window.cascadeDates(id, updateData.end);
+            L();
+            const updateData = { predecessor: predId };
+            if (newStart && newEnd) {
+                updateData.start = newStart;
+                updateData.end = newEnd;
+            }
+            
+            await updateDoc(doc(db,'artifacts',GLOBAL_APP_ID,'public','data',`ws_${window.APP_STATE.curWs}_tasks_${window.APP_STATE.curProjId}`, taskId), updateData);
+            if (updateData.end) await window.cascadeDates(taskId, updateData.end);
+            H();
         };
 
         // 날짜 및 기간 수정 처리 로직
@@ -990,11 +1107,9 @@
                 update.duration = d; 
                 update.end = addDays(t.start, d-1); 
             }
-            // 종료일 직접 수정 로직 추가
             if(field==='end') { 
                 update.end = val;
                 const diff = diffDays(t.start, val) + 1;
-                // 만약 시작일보다 과거로 종료일을 설정하면, 시작일을 종료일에 맞추고 기간을 1로 초기화
                 if(diff < 1) { 
                     update.start = val; 
                     update.duration = 1; 
