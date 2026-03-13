@@ -34,7 +34,8 @@
             <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-inner">
                 <i class="fa-solid fa-layer-group text-lg"></i>
             </div>
-            <h1 class="text-xl font-bold tracking-tight">Project Hub <span class="text-indigo-300 font-light text-sm ml-1">Workspace</span></h1>
+            <!-- 캐시 갱신 확인을 위해 v2.0 표시 추가 -->
+            <h1 class="text-xl font-bold tracking-tight">Project Hub <span class="text-indigo-300 font-bold text-sm ml-1 bg-indigo-800 px-2 py-0.5 rounded">v2.0</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4">
@@ -240,7 +241,6 @@
             } catch (e) { 
                 loader.classList.add('hidden');
                 if (e.code === 'auth/unauthorized-domain') {
-                    // 도메인 감지 후 에러 팝업 띄우기
                     const hostname = window.location.hostname || window.location.host || "도메인을 확인할 수 없습니다.";
                     document.getElementById('current-domain-text').innerText = hostname;
                     window.openModal('modal-error');
@@ -287,7 +287,6 @@
                 const identifier = currentUser.email || currentUser.uid;
                 myWorkspaces = allWs.filter(w => w.ownerEmail === identifier || (w.allowedEmails && w.allowedEmails.includes(identifier)));
                 
-                // 최신순 정렬
                 myWorkspaces.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
                 
                 renderWorkspaces();
@@ -332,9 +331,8 @@
         }
 
         window.submitNewWorkspace = async () => {
-            // Null 에러 방지를 위한 사용자 인증 정보 강력한 사전 체크
             if (!currentUser) {
-                alert("사용자 인증 정보가 유실되었습니다. 브라우저를 새로고침하거나 다시 로그인해 주세요.");
+                alert("사용자 인증 정보가 유실되었습니다. 새로고침 후 다시 시도해주세요.");
                 showView('view-login');
                 return;
             }
@@ -372,7 +370,7 @@
         };
 
         window.enterWorkspace = (wsId) => {
-            if (!currentUser) return; // 안전 체크
+            if (!currentUser) return;
             currentWsId = wsId;
             currentWsMeta = myWorkspaces.find(w => w.id === wsId);
             document.getElementById('current-ws-name').innerText = currentWsMeta.name;
@@ -411,7 +409,6 @@
                 
                 const prog = proj.progress || 0;
                 
-                // 확실한 클릭 인식을 위해 카드 전체를 덮는 투명 버튼 영역(z-0) 추가 및 글자 클릭 방해 방지
                 card.innerHTML = `
                     <div class="absolute top-0 left-0 w-full h-full z-0" onclick="window.openProject('${proj.id}')"></div>
                     <div class="absolute top-0 left-0 w-full h-1 bg-${prog === 100 ? 'emerald' : 'indigo'}-500 z-10 pointer-events-none"></div>
@@ -509,16 +506,14 @@
                 const titleEl = document.getElementById('project-title-display');
                 if(titleEl) titleEl.innerText = meta.title || "이름 없음";
                 
-                showView('view-project'); // 화면 전환을 가장 먼저 실행
+                showView('view-project'); 
                 
                 if (unsubscribeTasks) unsubscribeTasks();
                 loader.classList.remove('hidden');
                 
-                const tasksRef = collection(db, 'artifacts', appId, 'public', 'data', `ws_${currentWsId}_tasks_${currentProjId}`);
-                unsubscribeTasks = onSnapshot(tasksRef, (snap) => {
+                unsubscribeTasks = onSnapshot(getTasksRef(), (snap) => {
                     try {
                         tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                        // 안전한 정렬 로직 (문자열이 아닌 값이 들어올 경우의 에러 원천 차단)
                         tasks.sort((a,b) => String(a.wbs||'').localeCompare(String(b.wbs||''), undefined, {numeric: true}));
                         updateProjectMeta();
                         renderGantt();
@@ -531,7 +526,7 @@
                 }, (error) => {
                     console.error("Task Load Error:", error);
                     loader.classList.add('hidden');
-                    alert("작업 데이터를 불러오지 못했습니다. 파이어베이스 규칙을 확인해주세요.\n" + error.message);
+                    alert("작업 데이터를 불러오지 못했습니다. 파이어베이스 규칙을 확인해주세요.\n상세내용: " + error.message);
                 });
             } catch (err) {
                 console.error("Open Project Error:", err);
@@ -608,7 +603,6 @@
             let nextWBS = 1; 
             tasks.forEach(t => { 
                 if(t.wbs) { 
-                    // 에러 방지를 위해 강제로 문자열 변환 후 처리
                     const v = parseInt(String(t.wbs).split('.')[0]); 
                     if(v >= nextWBS) nextWBS = v + 1; 
                 } 
