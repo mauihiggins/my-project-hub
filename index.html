@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 매니저 - v4.2.4</title>
+    <title>프로젝트 매니저 - v4.2.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -75,7 +75,7 @@
     <header class="bg-[#0f2027] text-white p-2 shadow flex justify-between items-center shrink-0 z-50">
         <div class="flex items-center gap-3 cursor-pointer pl-2" onclick="window.goHome()">
             <i class="fa-solid fa-chart-gantt text-xl text-blue-400"></i>
-            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.2.4</span></h1>
+            <h1 class="text-base font-semibold tracking-wide">Project Manager <span class="text-gray-400 font-normal text-xs ml-1">v4.2.5</span></h1>
         </div>
         
         <div id="auth-section" class="flex items-center gap-4 pr-2">
@@ -602,7 +602,7 @@
         function renderGanttUI() {
             const list = document.getElementById('task-list'); list.innerHTML = '';
             const hdr = document.getElementById('gantt-header'); hdr.innerHTML = '';
-            const bdy = document.getElementById('gantt-body'); bdy.querySelectorAll('.gantt-bar, .dependency-line').forEach(e=>e.remove());
+            const bdy = document.getElementById('gantt-body'); bdy.querySelectorAll('.gantt-bar, .dependency-line, .today-line').forEach(e=>e.remove());
             const empty = document.getElementById('gantt-empty-state');
             
             const svg = document.getElementById('gantt-lines');
@@ -705,6 +705,20 @@
                 hdr.innerHTML += `<div class="flex-shrink-0 text-center border-r border-gray-300 h-full flex flex-col items-center justify-center ${isWeekend?'bg-gray-200':''}" style="width:30px;"><span class="text-[9px] text-gray-400 leading-none mb-0.5">${d.getMonth()+1}/${d.getDate()}</span><span class="text-[8px] text-gray-500 leading-none">${['S','M','T','W','T','F','S'][d.getDay()]}</span></div>`;
             }
             
+            // 오늘 날짜 표시 (Today Line)
+            const todayDate = new Date();
+            todayDate.setHours(0,0,0,0);
+            const minDZero = new Date(minD);
+            minDZero.setHours(0,0,0,0);
+            
+            if(todayDate >= minDZero && todayDate <= maxD) {
+                const offsetToday = diffDays(minDZero, todayDate);
+                const todayLine = document.createElement('div');
+                todayLine.className = 'today-line absolute top-0 bottom-0 border-l-2 border-red-500 pointer-events-none z-0';
+                todayLine.style.left = `${(offsetToday * 30) + 15}px`; // 중앙 정렬
+                bdy.appendChild(todayLine);
+            }
+
             const taskPositions = {};
 
             visibleTasks.forEach((t, i) => {
